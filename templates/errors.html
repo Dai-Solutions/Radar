@@ -1,0 +1,24 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="container py-5 text-center">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card bg-dark border-secondary p-5" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <h1 class="display-1 text-primary mb-4" style="font-family: 'Outfit', sans-serif; font-weight: 800;">
+                    {{ code }}
+                </h1>
+                <h2 class="text-white mb-4">{{ message }}</h2>
+                <p class="text-secondary mb-5">
+                    Radar sistemi şu anda bu isteği yerine getiremiyor. Lütfen ana sayfaya dönün veya daha sonra tekrar deneyin.
+                </p>
+                <div class="d-flex justify-content-center gap-3">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-5" style="border-radius: 12px; font-weight: 600;">
+                        Ana Sayfaya Dön
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

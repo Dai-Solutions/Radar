@@ -11,6 +11,8 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
 from werkzeug.security import generate_password_hash, check_password_hash
+import time
+from functools import wraps
 
 # Local modules (Englishified)
 from database import init_db, Customer, AgingRecord as AgingRecordDB, CreditRequest, CreditScore, get_session, User, Feedback
@@ -126,21 +128,53 @@ DATABASE_PATH = os.path.join(DATA_DIR, 'kredi.db')
 IMPORTS_DIR = os.path.join(os.path.dirname(__file__), 'imports')
 os.makedirs(IMPORTS_DIR, exist_ok=True)
 
-# Settings persistence
+# Settings persistence with simple cache
 SETTINGS_PATH = os.path.join(DATA_DIR, 'settings.json')
+_settings_cache = {'data': None, 'time': 0}
+CACHE_TTL = 300 # 5 minutes
 
 def get_settings():
+    global _settings_cache
+    now = time.time()
+    if _settings_cache['data'] and (now - _settings_cache['time'] < CACHE_TTL):
+        return _settings_cache['data']
+        
     if not os.path.exists(SETTINGS_PATH):
         default_settings = {"interest_rate": 45.0, "inflation_rate": 55.0, "sector_risk": 1.0}
         with open(SETTINGS_PATH, 'w') as f:
             json.dump(default_settings, f)
+        _settings_cache = {'data': default_settings, 'time': now}
         return default_settings
+        
     with open(SETTINGS_PATH, 'r') as f:
-        return json.load(f)
+        data = json.load(f)
+        _settings_cache = {'data': data, 'time': now}
+        return data
 
 def save_settings(settings):
+    global _settings_cache
     with open(SETTINGS_PATH, 'w') as f:
         json.dump(settings, f)
+    _settings_cache = {'data': settings, 'time': time.time()}
+
+# Simple custom rate limiter
+def request_limit(seconds=5):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return f(*args, **kwargs)
+            
+            last_request_time = session.get(f'last_req_{f.__name__}')
+            now = time.time()
+            if last_request_time and (now - last_request_time < seconds):
+                flash(f"Lütfen çok hızlı talep göndermeyin. {int(seconds - (now - last_request_time))} saniye bekleyin.", 'error')
+                return redirect(request.referrer or url_for('index'))
+            
+            session[f'last_req_{f.__name__}'] = now
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -467,6 +501,7 @@ def new_customer():
 
 @app.route('/credit_request', methods=['POST'])
 @login_required
+@request_limit(seconds=10)
 def credit_request():
     customer_id = request.form.get('customer_id')
     amount_str = request.form.get('amount')
@@ -681,7 +716,17 @@ def download_sample():
     return send_file(sample_path, as_attachment=True, download_name='radar_1_0_sample.xlsx')
 
 @app.errorhandler(404)
-def error_404(e): return "Page not found", 404
+def error_404(e):
+    return render_template('errors.html', code=404, message="Aradığınız sayfa bulunamadı."), 404
+
+@app.errorhandler(500)
+def error_500(e):
+    return render_template('errors.html', code=500, message="Sunucu tarafında bir hata oluştu. Lütfen teknik ekibe bildirin."), 500
+
+from sqlalchemy.exc import OperationalError
+@app.errorhandler(OperationalError)
+def handle_db_error(e):
+    return render_template('errors.html', code="DB", message="Veritabanı bağlantısında bir sorun oluştu. Lütfen tekrar deneyin."), 503
 
 @app.route('/submit_feedback', methods=['POST'])
 @login_required
