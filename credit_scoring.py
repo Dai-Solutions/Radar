@@ -249,9 +249,38 @@ class CreditScorer:
 
     def _create_assessment(self, res, liquidity, net_profit, z_score, inflation, lang):
         t = translations[lang]['expert_assessments']
-        notes = [t['inflation_warning'].format(inf=inflation)]
-        if liquidity < 1.0: notes.append(t['liquidity_low'].format(ratio=liquidity))
-        if res.historical_score < 60: notes.append(t['weak_discipline'].format(delay=res.avg_delay_days, impact=5))
+        notes = []
+        
+        # 1. Macro & Discipline
+        if res.historical_score < 60:
+            notes.append(t['weak_discipline'].format(delay=res.avg_delay_days, impact=5))
+        
+        # 2. Risk Indicators (New Math)
+        volatility = getattr(res, 'volatility', 0)
+        if volatility > 20: 
+            # High instability warning (Customizing based on tr/en if needed, or using general ones)
+            notes.append(f"DÜZENSİZLİK ALARMI: Ödeme günleri arasında ortalamadan {volatility:.1f} gün sapma var. Nakit akışı belirsizliği yüksek." if lang == 'tr' else f"STABILITY ALARM: Payment delay variation is high ({volatility:.1f} days). Cash flow predictability is low.")
+            
+        dscr = getattr(res, 'dscr_score', 1.5)
+        if dscr < 1.0:
+            notes.append(t['debt_strain'].format(ratio=dscr * 100))
+        elif dscr < 1.3:
+            notes.append(t['profit_low']) # Reusing profit low as a proxy for debt coverage strain
+
+        # 3. Solvency (Z-Score)
+        if z_score < 1.81:
+            notes.append(t['zscore_danger'])
+        
+        # 4. Request Ratio
+        if res.request_score < 40:
+            notes.append(t['high_request'])
+            
+        # 5. Inflation & Macro
+        notes.append(t['inflation_warning'].format(inf=inflation))
+        
+        if not notes:
+            notes.append(t['reliable_profile'])
+            
         return " ".join(notes)
 
     def _probability_analysis(self, settings, request_input, lang):

@@ -76,6 +76,53 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- NEW: ADVANCED MATH DASHBOARD -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 shadow-sm bg-light">
+                            <div class="card-body text-center py-4">
+                                <small class="text-secondary text-uppercase fw-bold d-block mb-2">ÖDEME İSTİKRARI (VOLATİLİTE)</small>
+                                <h3 class="fw-bold {{ 'text-danger' if sonuc.volatility > 20 else ('text-warning' if sonuc.volatility > 10 else 'text-success') }}">
+                                    {{ sonuc.volatility|round(1) }} GÜN
+                                </h3>
+                                <div class="progress mt-2" style="height: 6px;">
+                                    <div class="progress-bar {{ 'bg-danger' if sonuc.volatility > 20 else ('bg-warning' if sonuc.volatility > 10 else 'bg-success') }}" 
+                                         style="width: {{ [100, (sonuc.volatility * 2)]|min }}%"></div>
+                                </div>
+                                <p class="small text-muted mt-2 mb-0">Düşük değer = Yüksek Güven</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 shadow-sm bg-light">
+                            <div class="card-body text-center py-4">
+                                <small class="text-secondary text-uppercase fw-bold d-block mb-2">BORÇ KARŞILAMA (DSCR)</small>
+                                <h3 class="fw-bold {{ 'text-success' if sonuc.dscr_score >= 1.5 else ('text-warning' if sonuc.dscr_score >= 1.0 else 'text-danger') }}">
+                                    {{ sonuc.dscr_score|round(2) }}
+                                </h3>
+                                <span class="badge {{ 'bg-success' if sonuc.dscr_score >= 1.5 else ('bg-warning' if sonuc.dscr_score >= 1.0 else 'bg-danger') }} rounded-pill px-3">
+                                    {{ 'Güçlü' if sonuc.dscr_score >= 1.5 else ('Orta' if sonuc.dscr_score >= 1.0 else 'Zayıf') }}
+                                </span>
+                                <p class="small text-muted mt-2 mb-0">Nakit akışının borca oranı</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 shadow-sm bg-light">
+                            <div class="card-body text-center py-4">
+                                <small class="text-secondary text-uppercase fw-bold d-block mb-2">İFLAS RİSKİ (Z-SCORE)</small>
+                                <h3 class="fw-bold {{ 'text-success' if sonuc.z_score > 2.9 else ('text-warning' if sonuc.z_score > 1.2 else 'text-danger') }}">
+                                    {{ sonuc.z_score|round(2) }}
+                                </h3>
+                                <span class="badge bg-dark text-{{ 'success' if sonuc.z_score > 2.9 else ('warning' if sonuc.z_score > 1.2 else 'danger') }} border border-{{ 'success' if sonuc.z_score > 2.9 else ('warning' if sonuc.z_score > 1.2 else 'danger') }} px-3">
+                                    {{ sonuc.z_score_note }}
+                                </span>
+                                <p class="small text-muted mt-2 mb-0">Sektörel Altman Modeli</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <!-- DECISION SUMMARY BOX -->
                 <div class="alert alert-{{ 'success' if sonuc.credit_note == 'A' else ('warning' if sonuc.credit_note == 'B' else 'danger') }} border-2 shadow-sm mb-4">
                     <div class="row align-items-center">

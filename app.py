@@ -651,6 +651,10 @@ def report_view(talep_id):
             self.vade_days = s.vade_days
             self.vade_message = s.vade_message
             self.scenarios = scens
+            self.volatility = getattr(s, 'volatility', 0)
+            self.dscr_score = getattr(s, 'dscr_score', 0)
+            self.z_score = getattr(s, 'z_score', 0)
+            self.z_score_note = getattr(s, 'z_score_note', 'N/A')
 
     sonuc = ResultWrapper(skor, scenarios)
     
