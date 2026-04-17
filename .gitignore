@@ -1,0 +1,9 @@
+.env
+data/
+__pycache__/
+*.pyc
+imports/
+scratch/
+.radar_memory
+.opencode
+static/radar_1_0_sample.xlsx
