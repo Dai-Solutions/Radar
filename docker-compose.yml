@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  radar-app:
+    build: .
+    container_name: radar_v1_app
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8005:8000" # Mapping external 8005 to internal 8000
+    volumes:
+      - ./data:/app/data
+      - ./imports:/app/imports
+    networks:
+      - radar-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  radar-network:
+    driver: bridge

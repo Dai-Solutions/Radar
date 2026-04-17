@@ -163,14 +163,21 @@ class ExcelImporter:
             return []
 
     def _get_column_value(self, row: pd.Series, key: str, default=0):
-        """Get column value based on key/mapping"""
+        """Get column value based on key/mapping with strict type validation"""
         if key in row.index:
             try:
                 val = row[key]
-                if pd.isna(val): return default
+                if pd.isna(val) or val == '': 
+                    return default
+                
+                # Strip non-numeric artifacts if it's a string disguised as a number
+                if isinstance(val, str):
+                    val = val.replace(',', '').replace(' ', '')
+                
                 return float(val)
-            except:
-                pass
+            except (ValueError, TypeError):
+                # Log invalid data types if necessary (silent default for now)
+                return default
         return default
     
     def create_template(self, file_path: str):

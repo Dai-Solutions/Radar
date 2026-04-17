@@ -136,22 +136,40 @@ class Feedback(Base):
     
     user = relationship("User")
 
+_engine = None
+
 def get_db_uri():
-    # Use environment variable for production PostgreSQL, fallback to local SQLite for tests if needed
     uri = os.getenv('DATABASE_URL')
     if not uri:
-        # Development fallback
         db_path = os.path.join(os.getcwd(), 'data', 'kredi.db')
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         uri = f'sqlite:///{db_path}'
     return uri
 
+def get_engine():
+    global _engine
+    if _engine is None:
+        uri = get_db_uri()
+        # Connection pooling for Production (PostgreSQL)
+        if uri.startswith('postgresql'):
+            _engine = create_engine(
+                uri,
+                pool_size=5,
+                max_overflow=10,
+                pool_timeout=30,
+                pool_recycle=1800
+            )
+        else:
+            # SQLite doesn't support pool_size
+            _engine = create_engine(uri, connect_args={"check_same_thread": False})
+    return _engine
+
 def init_db():
-    engine = create_engine(get_db_uri())
+    engine = get_engine()
     Base.metadata.create_all(engine)
     return engine
 
 def get_session():
-    engine = create_engine(get_db_uri())
+    engine = get_engine()
     Session = sessionmaker(bind=engine)
     return Session()

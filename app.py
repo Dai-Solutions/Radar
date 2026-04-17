@@ -13,6 +13,8 @@ from authlib.integrations.flask_client import OAuth
 from werkzeug.security import generate_password_hash, check_password_hash
 import time
 from functools import wraps
+import logging
+from logging.handlers import RotatingFileHandler
 
 # Local modules (Englishified)
 from database import init_db, Customer, AgingRecord as AgingRecordDB, CreditRequest, CreditScore, get_session, User, Feedback
@@ -56,6 +58,20 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 mail = Mail(app)
 ts = URLSafeTimedSerializer(app.secret_key)
+
+# Logging Configuration
+if not os.path.exists('data'):
+    os.makedirs('data')
+
+log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]')
+log_file = 'data/radar.log'
+file_handler = RotatingFileHandler(log_file, maxBytes=10485760, backupCount=10)
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
+app.logger.info('Radar 1.0 Startup - Production Hardening Mode Active')
 
 # OAuth Configuration
 oauth = OAuth(app)
