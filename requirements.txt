@@ -1,0 +1,13 @@
+flask==3.0.0
+flask-login
+pandas==2.1.4
+openpyxl==3.1.2
+SQLAlchemy==2.0.23
+python-dateutil==2.8.2
+python-dotenv
+gunicorn
+authlib
+requests
+psycopg2-binary
+flask-mail
+itsdangerous

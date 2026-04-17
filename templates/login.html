@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t['login_title'] }} - {{ app_version }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #ffffff;
+            --accent: #3b82f6;
+            --bg: #111111;
+            --card: #1a1a1a;
+            --text-dim: #999999;
+        }
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .login-card {
+            background: var(--card);
+            padding: 3rem;
+            border-radius: 24px;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            position: relative;
+        }
+        .logo {
+            width: 90px; /* Büyütülmüş Logo */
+            margin-bottom: 2rem;
+            transition: transform 0.3s ease;
+        }
+        .logo:hover { transform: scale(1.05); }
+        h1 { font-size: 2.2rem; margin: 0 0 0.5rem 0; font-weight: 600; letter-spacing: -0.02em; }
+        .sub-title { color: var(--text-dim); margin-bottom: 2.5rem; font-size: 0.95rem; }
+        
+        .btn-google {
+            background: transparent;
+            border: 1px solid #444;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        .btn-google:hover { background: #222; border-color: #666; }
+        .btn-google img { width: 20px; }
+
+        .divider { margin: 2rem 0; display: flex; align-items: center; color: #444; font-size: 0.8rem; }
+        .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #333; }
+        .divider span { padding: 0 1rem; }
+
+        .form-group { text-align: left; margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-dim); }
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #222;
+            border: 1px solid #333;
+            border-radius: 10px;
+            color: white;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        input:focus { outline: none; border-color: var(--accent); }
+
+        .btn-login {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            width: 100%;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+        
+        .footer-links { margin-top: 2rem; font-size: 0.85rem; color: var(--text-dim); }
+        .footer-links a { color: var(--accent); text-decoration: none; font-weight: 500; }
+
+        .lang-switch {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+        }
+        .lang-btn {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+        .lang-btn.active { border-color: var(--accent); color: var(--accent); }
+
+        /* Counter */
+        .user-counter {
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            color: #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .dot { width: 6px; height: 6px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="lang-switch">
+            <a href="{{ url_for('set_language', lang='tr') }}" class="lang-btn {% if lang == 'tr' %}active{% endif %}">TR</a>
+            <a href="{{ url_for('set_language', lang='en') }}" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
+        </div>
+
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="DAI" class="logo">
+        <div style="margin-top: -1.5rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--accent); font-weight: 500;">
+            {{ t['tagline'] }}
+        </div>
+        <h1>{{ app_version }}</h1>
+        <div class="sub-title">{{ t['sub_title'] }}</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              {% set color_map = {
+                  'error': {'bg': 'rgba(239, 68, 68, 0.15)', 'text': '#ef4444', 'border': 'rgba(239, 68, 68, 0.3)'},
+                  'warning': {'bg': 'rgba(245, 158, 11, 0.15)', 'text': '#f59e0b', 'border': 'rgba(245, 158, 11, 0.3)'},
+                  'success': {'bg': 'rgba(16, 185, 129, 0.15)', 'text': '#10b981', 'border': 'rgba(16, 185, 129, 0.3)'},
+                  'info': {'bg': 'rgba(59, 130, 246, 0.15)', 'text': '#3b82f6', 'border': 'rgba(59, 130, 246, 0.3)'}
+              } %}
+              {% set style = color_map.get(category, color_map['info']) %}
+              <div style="background: {{ style['bg'] }}; color: {{ style['text'] }}; border: 1px solid {{ style['border'] }}; padding: 12px; border-radius: 12px; margin-bottom: 2rem; font-size: 0.9rem;">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <a href="{{ url_for('login_google') }}" class="btn-google">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+            {{ t['google_login'] }}
+        </a>
+
+        <div class="divider"><span>{{ t['or'] }}</span></div>
+
+        <form action="{{ url_for('login') }}" method="POST">
+            <div class="form-group">
+                <label>{{ t['email'] }}</label>
+                <input type="email" name="email" required placeholder="{{ t['email_placeholder'] }}">
+            </div>
+            <div class="form-group">
+                <label>{{ t['password'] }}</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-login">{{ t['login_btn'] }}</button>
+        </form>
+
+        <div class="footer-links">
+            {{ t['no_account'] }} <a href="{{ url_for('register') }}">{{ t['register_btn'] }}</a>
+        </div>
+
+        <div class="user-counter">
+            <div class="dot"></div>
+            {{ total_users }} {{ t['active_users'] }}
+        </div>
+    </div>
+</body>
+</html>
