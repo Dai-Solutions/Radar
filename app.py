@@ -29,7 +29,7 @@ def create_app():
     app.secret_key = os.getenv('FLASK_SECRET_KEY', 'radar_1_0_secret_key')
     
     # Prefix configuration for server deployment
-    APP_PREFIX = os.getenv('APP_PREFIX', '/radar')
+    APP_PREFIX = os.getenv('APP_PREFIX', '/solutions/radar')
     
     # Wrap the application with DispatcherMiddleware for sub-path support
     app.wsgi_app = DispatcherMiddleware(Flask('dummy'), {
@@ -58,6 +58,7 @@ def create_app():
     app.config['DOMAIN_NAME'] = os.getenv('DOMAIN_NAME', 'daisoftwares.com')
     app.config['ADMIN_EMAIL'] = os.getenv('ADMIN_EMAIL', 'info@daisoftwares.com')
     app.config['APP_VERSION'] = os.getenv('APP_VERSION', 'Radar 1.0')
+    app.config['APP_PREFIX'] = APP_PREFIX
     
     # OAuth Config
     app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
@@ -91,7 +92,7 @@ def create_app():
         lang = session.get('lang', 'tr')
         
         # Handle prefix in translations (simple string replacement for the dict)
-        prefix = os.getenv('APP_PREFIX', '/radar')
+        prefix = app.config.get('APP_PREFIX', os.getenv('APP_PREFIX', '/solutions/radar'))
         import json
         t_raw = json.dumps(translations[lang])
         t_formatted = json.loads(t_raw.replace('{prefix}', prefix))
