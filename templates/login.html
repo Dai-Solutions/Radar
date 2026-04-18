@@ -131,8 +131,8 @@
 <body>
     <div class="login-card">
         <div class="lang-switch">
-            <a href="{{ url_for('set_language', lang='tr') }}" class="lang-btn {% if lang == 'tr' %}active{% endif %}">TR</a>
-            <a href="{{ url_for('set_language', lang='en') }}" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
+            <a href="{{ url_for('main.set_language', lang='tr') }}" class="lang-btn {% if lang == 'tr' %}active{% endif %}">TR</a>
+            <a href="{{ url_for('main.set_language', lang='en') }}" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
         </div>
 
         <img src="{{ url_for('static', filename='logo.png') }}" alt="DAI" class="logo">
@@ -153,20 +153,20 @@
               } %}
               {% set style = color_map.get(category, color_map['info']) %}
               <div style="background: {{ style['bg'] }}; color: {{ style['text'] }}; border: 1px solid {{ style['border'] }}; padding: 12px; border-radius: 12px; margin-bottom: 2rem; font-size: 0.9rem;">
-                {{ message }}
+                {{ message | safe }}
               </div>
             {% endfor %}
           {% endif %}
         {% endwith %}
 
-        <a href="{{ url_for('login_google') }}" class="btn-google">
+        <a href="{{ url_for('auth.login_google') }}" class="btn-google">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
             {{ t['google_login'] }}
         </a>
 
         <div class="divider"><span>{{ t['or'] }}</span></div>
 
-        <form action="{{ url_for('login') }}" method="POST">
+        <form action="{{ url_for('auth.login') }}" method="POST">
             <div class="form-group">
                 <label>{{ t['email'] }}</label>
                 <input type="email" name="email" required placeholder="{{ t['email_placeholder'] }}">
@@ -179,7 +179,7 @@
         </form>
 
         <div class="footer-links">
-            {{ t['no_account'] }} <a href="{{ url_for('register') }}">{{ t['register_btn'] }}</a>
+            {{ t['no_account'] }} <a href="{{ url_for('auth.register') }}">{{ t['register_btn'] }}</a>
         </div>
 
         <div class="user-counter">

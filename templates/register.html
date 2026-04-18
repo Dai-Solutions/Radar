@@ -83,8 +83,8 @@
 <body>
     <div class="login-card">
         <div class="lang-switch">
-            <a href="{{ url_for('set_language', lang='tr') }}" class="lang-btn {% if lang == 'tr' %}active{% endif %}">TR</a>
-            <a href="{{ url_for('set_language', lang='en') }}" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
+            <a href="{{ url_for('main.set_language', lang='tr') }}" class="lang-btn {% if lang == 'tr' %}active{% endif %}">TR</a>
+            <a href="{{ url_for('main.set_language', lang='en') }}" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
         </div>
 
         <img src="{{ url_for('static', filename='logo.png') }}" alt="DAI" class="logo">
@@ -105,13 +105,13 @@
               } %}
               {% set style = color_map.get(category, color_map['info']) %}
               <div style="background: {{ style['bg'] }}; color: {{ style['text'] }}; border: 1px solid {{ style['border'] }}; padding: 12px; border-radius: 12px; margin-bottom: 2rem; font-size: 0.9rem;">
-                {{ message }}
+                {{ message | safe }}
               </div>
             {% endfor %}
           {% endif %}
         {% endwith %}
 
-        <form action="{{ url_for('register') }}" method="POST">
+        <form action="{{ url_for('auth.register') }}" method="POST">
             <div class="form-group">
                 <label>{{ t['full_name'] }}</label>
                 <input type="text" name="full_name" required>
@@ -128,7 +128,7 @@
         </form>
 
         <div class="footer-links">
-            {{ t['have_account'] }} <a href="{{ url_for('login') }}">{{ t['login_btn'] }}</a>
+            {{ t['have_account'] }} <a href="{{ url_for('auth.login') }}">{{ t['login_btn'] }}</a>
         </div>
     </div>
 </body>

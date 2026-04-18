@@ -57,11 +57,12 @@ class ExcelImporter:
             required_columns = ['account_code', 'account_name']
             for col in required_columns:
                 if col not in df.columns:
-                    self.last_error = f"Required column not found: {col}"
+                    self.last_error = f"Missing required column: {col}"
                     return None, {}
             
             aging_records = []
             customer_info = {}
+            validation_errors = []
             
             # Convert each row to AgingRecord
             for idx, row in df.iterrows():
@@ -69,7 +70,18 @@ class ExcelImporter:
                 account_name = str(row.get('account_name', '')).strip()
                 
                 if not account_code:
+                    validation_errors.append(f"Row {idx+2}: Account code is empty.")
                     continue
+                
+                # Check for numeric values in aging columns
+                aging_cols = ['overdue', 'days_1_30', 'days_31_60', 'days_61_90', 'days_90_plus']
+                for col in aging_cols:
+                    val = row.get(col)
+                    if pd.notna(val) and not isinstance(val, (int, float)):
+                        try:
+                            float(str(val).replace(',', ''))
+                        except:
+                            validation_errors.append(f"Row {idx+2}: Column {col} must be numeric.")
                 
                 overdue = self._get_column_value(row, 'overdue', 0)
                 days_1_30 = self._get_column_value(row, 'days_1_30', 0)
@@ -94,6 +106,11 @@ class ExcelImporter:
                 
                 aging_records.append(record)
                 customer_info[account_code] = account_name
+            
+            if validation_errors:
+                self.last_error = "\n".join(validation_errors[:5]) # Show first 5 errors
+                if len(validation_errors) > 5:
+                    self.last_error += f"\n...and {len(validation_errors)-5} more."
             
             return aging_records, customer_info
             

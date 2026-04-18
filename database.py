@@ -101,6 +101,7 @@ class CreditScore(Base):
     z_score = Column(Float)
     z_score_note = Column(String)
     dscr_score = Column(Float)
+    volatility = Column(Float) # NEW: Growth stability metric
     
     avg_delay_days = Column(Float)
     avg_debt = Column(Float)
@@ -136,7 +137,10 @@ class Feedback(Base):
     
     user = relationship("User")
 
+from sqlalchemy.orm import sessionmaker, relationship, scoped_session
+
 _engine = None
+_session_factory = None
 
 def get_db_uri():
     uri = os.getenv('DATABASE_URL')
@@ -150,17 +154,15 @@ def get_engine():
     global _engine
     if _engine is None:
         uri = get_db_uri()
-        # Connection pooling for Production (PostgreSQL)
         if uri.startswith('postgresql'):
             _engine = create_engine(
                 uri,
-                pool_size=5,
-                max_overflow=10,
+                pool_size=10,
+                max_overflow=20,
                 pool_timeout=30,
                 pool_recycle=1800
             )
         else:
-            # SQLite doesn't support pool_size
             _engine = create_engine(uri, connect_args={"check_same_thread": False})
     return _engine
 
@@ -170,6 +172,11 @@ def init_db():
     return engine
 
 def get_session():
-    engine = get_engine()
-    Session = sessionmaker(bind=engine)
-    return Session()
+    global _session_factory
+    if _session_factory is None:
+        engine = get_engine()
+        _session_factory = sessionmaker(bind=engine)
+    
+    # Return a scoped session session
+    s = scoped_session(_session_factory)
+    return s()

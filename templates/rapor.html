@@ -5,254 +5,321 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Radar 1.0 - {{ t['report_title'] }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Outfit', sans-serif; background-color: #f8f9fa; }
-        .navbar { background: #111 !important; }
-        .nav-link, .navbar-brand { color: #fff !important; }
-        .card { border-radius: 16px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        :root {
+            --primary-glow: rgba(59, 130, 246, 0.5);
+            --accent-glow: rgba(16, 185, 129, 0.5);
+            --danger-glow: rgba(239, 68, 68, 0.5);
+        }
+        body { 
+            background: radial-gradient(circle at 10% 20%, #0f172a 0%, #000 100%);
+            color: #f8fafc;
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+        }
+        .navbar { 
+            background: rgba(0,0,0,0.5) !important; 
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .nav-link { color: #94a3b8 !important; font-weight: 600; transition: 0.3s; }
+        .nav-link:hover { color: #fff !important; }
+        .text-glow-info { text-shadow: 0 0 15px rgba(59, 130, 246, 0.6); color: #3b82f6 !important; }
+        .text-glow-danger { text-shadow: 0 0 15px rgba(239, 68, 68, 0.6); color: #ef4444 !important; }
+        
+        .user-counter { font-size: 0.75rem; color: #10b981; display: flex; align-items: center; gap: 8px; }
+        .dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; }
+        .lang-switch-pill { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 50px; padding: 4px 12px; }
+        .lang-link { color: #64748b; text-decoration: none; font-size: 0.75rem; font-weight: 700; transition: 0.3s; }
+        .lang-link.active { color: #3b82f6; }
+
+        .report-header {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+            border-radius: 24px 24px 0 0;
+            padding: 2.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .score-box {
+            font-size: 5rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .table-premium { background: transparent !important; color: #e2e8f0; }
+        .table-premium thead th { 
+            background: rgba(255,255,255,0.03); 
+            border-bottom: 2px solid rgba(255,255,255,0.05);
+            color: #94a3b8;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 15px;
+        }
     </style>
 </head>
 <body>
     <!-- Feedback Modal -->
-    <div id="feedbackModal" style="display:none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
-        <div style="background: #1a1a1a; margin: 10% auto; padding: 2rem; border: 1px solid #333; border-radius: 24px; width: 90%; max-width: 500px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-            <h3 style="margin-top: 0; margin-bottom: 1rem; color: #fff;">{{ t['feedback'] }}</h3>
-            <p style="color: #999; font-size: 0.9rem; margin-bottom: 1.5rem;">{{ t['feedback_desc'] }}</p>
-            <textarea id="feedbackText" style="width: 100%; height: 150px; background: #222; border: 1px solid #333; border-radius: 12px; color: #fff; padding: 1rem; font-family: inherit; margin-bottom: 1.5rem;" placeholder="{{ t['msg_placeholder'] }}"></textarea>
-            <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                <button onclick="closeFeedbackModal()" style="background: transparent; border: 1px solid #333; color: #999; padding: 10px 20px; border-radius: 10px; cursor: pointer;">{{ t['cancel'] }}</button>
-                <button id="submitFeedbackBtn" onclick="submitFeedback()" style="background: #3b82f6; border: none; color: #fff; padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer;">{{ t['send'] }}</button>
+    <div id="feedbackModal" style="display:none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);">
+        <div class="glass-card" style="margin: 10% auto; padding: 3rem; width: 90%; max-width: 500px;">
+            <h3 class="fw-bold mb-2 text-white">{{ t['feedback'] }}</h3>
+            <p class="text-secondary small mb-4">{{ t['feedback_desc'] }}</p>
+            <textarea id="feedbackText" class="form-control mb-4 bg-dark text-white border-secondary" style="height: 150px; border-radius:12px; padding:15px;" placeholder="{{ t['msg_placeholder'] }}"></textarea>
+            <div class="d-flex gap-2 justify-content-end">
+                <button onclick="closeFeedbackModal()" class="btn btn-outline-secondary border-0 text-white-50">{{ t['cancel'] }}</button>
+                <button id="submitFeedbackBtn" onclick="submitFeedback()" class="btn btn-primary px-4 fw-bold rounded-3">{{ t['send'] }}</button>
             </div>
         </div>
     </div>
 
-    <nav class="navbar navbar-expand-lg py-3 shadow-sm">
+    <!-- Universal Navbar -->
+    <nav class="navbar navbar-expand-lg py-3 sticky-top">
         <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="45" class="me-2">
-                <span class="fw-bold h4 mb-0">Radar <small class="text-secondary fw-normal">1.0</small></span>
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="45" class="me-2 text-white">
+                <span class="fw-bold h4 mb-0 text-white">Radar <small class="text-secondary fw-normal">1.0</small></span>
             </a>
-            <div class="navbar-nav ms-auto align-items-center">
-                <a class="nav-link me-3 fw-bold text-accent" href="#" onclick="openFeedbackModal(); return false;" style="font-size: 0.9rem;">{{ t['feedback'] }}</a>
-                <a class="nav-link fw-semibold px-3" href="{{ url_for('index') }}">{{ t['dashboard'] }}</a>
-                <div class="vr mx-2 bg-secondary"></div>
-                <span class="navbar-text fw-bold text-info px-3">{{ current_user.email }}</span>
-                <a class="nav-link text-danger fw-bold px-3" href="{{ url_for('logout') }}">{{ t['logout'] }}</a>
+            
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#radarNav">
+                <i class="bi bi-list text-white fs-2"></i>
+            </button>
+
+            <div class="collapse navbar-collapse" id="radarNav">
+                <div class="navbar-nav ms-auto align-items-center gap-2">
+                    <div class="user-counter me-3 d-none d-lg-flex">
+                        <div class="dot"></div>
+                        {{ total_users }} {{ t['active_users'] }}
+                    </div>
+
+                    <a class="nav-link px-3 text-glow-danger" href="#" onclick="openSponsorModal(); return false;">
+                        <i class="bi bi-heart-fill me-2"></i>{{ t['sponsor'] | upper }}
+                    </a>
+
+                    <div class="lang-switch-pill d-flex align-items-center mx-2">
+                        <a href="{{ url_for('main.set_language', lang='tr') }}" class="lang-link px-2 {{ 'active' if lang == 'tr' else '' }}">TR</a>
+                        <span class="text-secondary opacity-25">|</span>
+                        <a href="{{ url_for('main.set_language', lang='en') }}" class="lang-link px-2 {{ 'active' if lang == 'en' else '' }}">EN</a>
+                    </div>
+
+                    <a class="nav-link px-3 text-glow-info" href="{{ url_for('main.guvenlik') }}">
+                        <i class="bi bi-shield-fill-check fs-5 me-2"></i>{{ t['security'] | upper }}
+                    </a>
+
+                    <div class="vr mx-2 bg-secondary opacity-25 d-none d-lg-block"></div>
+
+                    <a class="nav-link px-2" href="{{ url_for('customer.new_customer') }}">{{ t['new_customer'] | upper }}</a>
+                    <a class="nav-link px-2" href="{{ url_for('admin.import_excel') }}">{{ t['import_excel'] | upper }}</a>
+                    <a class="nav-link px-2" href="{{ url_for('main.index') }}">{{ t['dashboard'] | upper }}</a>
+
+                    <div class="vr mx-2 bg-secondary opacity-25 d-none d-lg-block"></div>
+
+                    <span class="navbar-text small fw-bold text-info px-2 d-none d-xl-inline">{{ current_user.email }}</span>
+                    <a class="nav-link text-danger fw-bold px-3" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i></a>
+                </div>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <div class="card shadow-lg overflow-hidden">
-            <div class="card-header bg-{{ 'success' if sonuc.credit_note == 'A' else ('warning text-dark' if sonuc.credit_note == 'B' else 'danger') }} text-white py-3">
-                <h4 class="mb-0 fw-bold">{{ t['report_title'] }}</h4>
+    <div class="container py-5">
+        <div class="glass-card shadow-lg overflow-hidden border-0">
+            <div class="report-header bg-{{ 'success' if sonuc.credit_note == 'A' else ('warning' if sonuc.credit_note == 'B' else 'danger') }} bg-opacity-10">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <span class="badge bg-white bg-opacity-10 text-white-50 border border-white border-opacity-10 px-3 py-2 rounded-pill small fw-bold text-uppercase mb-3">
+                            {{ t['report_title'] }}
+                        </span>
+                        <h1 class="display-5 fw-bold text-white mb-2">{{ musteri.account_name }}</h1>
+                        <code class="text-info fs-5">{{ musteri.account_code }}</code>
+                    </div>
+                    <div class="col-md-4 text-md-end mt-4 mt-md-0">
+                        <div class="score-box text-{{ 'success' if sonuc.credit_note == 'A' else ('warning' if sonuc.credit_note == 'B' else 'danger') }} text-glow-{{ 'success' if sonuc.credit_note == 'A' else ('warning' if sonuc.credit_note == 'B' else 'danger') }}">
+                            {{ sonuc.credit_note }}
+                        </div>
+                        <div class="text-secondary fw-bold text-uppercase small tracking-widest mt-2">{{ t['score'] }}</div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
+
+            <div class="p-4 p-md-5">
                 <!-- STRATEGIC RECOMMENDATION BOX -->
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; border-radius: 20px;">
-                            <div class="card-body p-4">
-                                <div class="d-flex align-items-center mb-3">
-                                    <div class="bg-primary rounded-circle p-2 me-3">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 16h2v2h-2zm0-6h2v4h-2z"/></svg>
-                                    </div>
-                                    <h5 class="mb-0 fw-bold text-uppercase tracking-wider">{{ t['strategic_analysis']['title'] }}</h5>
-                                </div>
-                                <div class="row g-4">
-                                    <div class="col-md-6 border-end border-secondary border-opacity-25">
-                                        <small class="text-secondary text-uppercase fw-bold">{{ t['strategic_analysis']['vade_label'] }}</small>
-                                        <h2 class="display-6 fw-bold text-info mb-1">{{ sonuc.vade_days }} GÜN</h2>
-                                        <p class="mb-0 text-light opacity-75 h6">{{ sonuc.vade_message }}</p>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <small class="text-secondary text-uppercase fw-bold">{{ t['strategic_analysis']['limit_label'] }}</small>
-                                        <h2 class="display-6 fw-bold text-success mb-1">{{ "{:,.0f} TL".format(sonuc.recommended_limit) }}</h2>
-                                        <p class="mb-0 text-light opacity-75 h6">{{ t['fin_verdicts'][sonuc.credit_note] }}</p>
-                                    </div>
-                                </div>
-                            </div>
+                <div class="glass-card p-4 mb-5" style="background: rgba(15, 23, 42, 0.4); border: 2px solid rgba({{ '16, 185, 129' if sonuc.credit_note == 'A' else ('245, 158, 11' if sonuc.credit_note == 'B' else '239, 68, 68') }}, 0.3);">
+                    <div class="row g-4">
+                        <div class="col-md-6 border-end border-white border-opacity-10">
+                            <h6 class="text-secondary text-uppercase fw-bold mb-3 small tracking-widest">{{ t['strategic_analysis']['vade_label'] }}</h6>
+                            <h2 class="display-6 fw-bold text-info mb-2 text-glow-info">{{ sonuc.vade_days }} {{ t['risk_indicators']['days_suffix'] }}</h2>
+                            <p class="mb-0 text-white-50">{{ sonuc.vade_message }}</p>
+                        </div>
+                        <div class="col-md-6 ps-md-4">
+                            <h6 class="text-secondary text-uppercase fw-bold mb-3 small tracking-widest">{{ t['strategic_analysis']['limit_label'] }}</h6>
+                            <h2 class="display-6 fw-bold text-success mb-2 text-glow-success">{{ "{:,.0f} TL".format(sonuc.recommended_limit) }}</h2>
+                            <p class="mb-0 text-white-50">{{ t['fin_verdicts'][sonuc.credit_note] }}</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- NEW: ADVANCED MATH DASHBOARD -->
-                <div class="row mb-4">
+                <!-- INDICATORS GRID -->
+                <div class="row g-4 mb-5">
                     <div class="col-md-4">
-                        <div class="card h-100 border-0 shadow-sm bg-light">
-                            <div class="card-body text-center py-4">
-                                <small class="text-secondary text-uppercase fw-bold d-block mb-2">ÖDEME İSTİKRARI (VOLATİLİTE)</small>
-                                <h3 class="fw-bold {{ 'text-danger' if sonuc.volatility > 20 else ('text-warning' if sonuc.volatility > 10 else 'text-success') }}">
-                                    {{ sonuc.volatility|round(1) }} GÜN
-                                </h3>
-                                <div class="progress mt-2" style="height: 6px;">
-                                    <div class="progress-bar {{ 'bg-danger' if sonuc.volatility > 20 else ('bg-warning' if sonuc.volatility > 10 else 'bg-success') }}" 
-                                         style="width: {{ [100, (sonuc.volatility * 2)]|min }}%"></div>
-                                </div>
-                                <p class="small text-muted mt-2 mb-0">Düşük değer = Yüksek Güven</p>
+                        <div class="glass-card p-4 text-center h-100 border-0 bg-white bg-opacity-5">
+                            <small class="text-secondary text-uppercase fw-bold d-block mb-3 small tracking-widest">{{ t['risk_indicators']['volatility'] }}</small>
+                            <h3 class="fw-bold mb-3 {{ 'text-danger' if sonuc.volatility > 20 else ('text-warning' if sonuc.volatility > 10 else 'text-success') }}">
+                                {{ sonuc.volatility|round(1) }} {{ t['risk_indicators']['days_suffix'] }}
+                            </h3>
+                            <div class="progress bg-dark" style="height: 6px;">
+                                <div class="progress-bar {{ 'bg-danger' if sonuc.volatility > 20 else ('bg-warning' if sonuc.volatility > 10 else 'bg-success') }}" 
+                                     style="width: {{ [100, (sonuc.volatility * 2)]|min }}%"></div>
                             </div>
+                            <p class="small text-white-50 mt-3 mb-0">{{ t['risk_indicators']['volatility_desc'] }}</p>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="card h-100 border-0 shadow-sm bg-light">
-                            <div class="card-body text-center py-4">
-                                <small class="text-secondary text-uppercase fw-bold d-block mb-2">BORÇ KARŞILAMA (DSCR)</small>
-                                <h3 class="fw-bold {{ 'text-success' if sonuc.dscr_score >= 1.5 else ('text-warning' if sonuc.dscr_score >= 1.0 else 'text-danger') }}">
-                                    {{ sonuc.dscr_score|round(2) }}
-                                </h3>
-                                <span class="badge {{ 'bg-success' if sonuc.dscr_score >= 1.5 else ('bg-warning' if sonuc.dscr_score >= 1.0 else 'bg-danger') }} rounded-pill px-3">
-                                    {{ 'Güçlü' if sonuc.dscr_score >= 1.5 else ('Orta' if sonuc.dscr_score >= 1.0 else 'Zayıf') }}
-                                </span>
-                                <p class="small text-muted mt-2 mb-0">Nakit akışının borca oranı</p>
-                            </div>
+                        <div class="glass-card p-4 text-center h-100 border-0 bg-white bg-opacity-5">
+                            <small class="text-secondary text-uppercase fw-bold d-block mb-3 small tracking-widest">{{ t['risk_indicators']['dscr'] }}</small>
+                            <h3 class="fw-bold mb-3 {{ 'text-success text-glow-success' if sonuc.dscr_score >= 1.5 else ('text-warning' if sonuc.dscr_score >= 1.0 else 'text-danger') }}">
+                                {{ sonuc.dscr_score|round(2) }}
+                            </h3>
+                            <span class="badge {{ 'bg-success' if sonuc.dscr_score >= 1.5 else ('bg-warning text-dark' if sonuc.dscr_score >= 1.0 else 'bg-danger') }} rounded-pill px-3 py-2 small fw-bold">
+                                {{ t['risk_indicators']['dscr_high'] if sonuc.dscr_score >= 1.5 else (t['risk_indicators']['dscr_mid'] if sonuc.dscr_score >= 1.0 else t['risk_indicators']['dscr_low']) }}
+                            </span>
+                            <p class="small text-white-50 mt-3 mb-0">{{ t['risk_indicators']['dscr_desc'] }}</p>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="card h-100 border-0 shadow-sm bg-light">
-                            <div class="card-body text-center py-4">
-                                <small class="text-secondary text-uppercase fw-bold d-block mb-2">İFLAS RİSKİ (Z-SCORE)</small>
-                                <h3 class="fw-bold {{ 'text-success' if sonuc.z_score > 2.9 else ('text-warning' if sonuc.z_score > 1.2 else 'text-danger') }}">
-                                    {{ sonuc.z_score|round(2) }}
-                                </h3>
-                                <span class="badge bg-dark text-{{ 'success' if sonuc.z_score > 2.9 else ('warning' if sonuc.z_score > 1.2 else 'danger') }} border border-{{ 'success' if sonuc.z_score > 2.9 else ('warning' if sonuc.z_score > 1.2 else 'danger') }} px-3">
-                                    {{ sonuc.z_score_note }}
-                                </span>
-                                <p class="small text-muted mt-2 mb-0">Sektörel Altman Modeli</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- DECISION SUMMARY BOX -->
-                <div class="alert alert-{{ 'success' if sonuc.credit_note == 'A' else ('warning' if sonuc.credit_note == 'B' else 'danger') }} border-2 shadow-sm mb-4">
-                    <div class="row align-items-center">
-                        <div class="col-md-2 text-center border-end border-opacity-25 border-dark">
-                            <h1 class="display-3 mb-0"><strong>{{ sonuc.credit_note }}</strong></h1>
-                            <small class="text-uppercase fw-bold">{{ t['score'] }}</small>
-                        </div>
-                        <div class="col-md-7 ps-4">
-                            <h4 class="alert-heading fw-bold">{{ t['final_decision'] }}</h4>
-                            <p class="mb-0 h5 mt-2">"{{ t['fin_verdicts'][sonuc.credit_note] }}"</p>
-                        </div>
-                        <div class="col-md-3 text-end border-start border-opacity-25 border-dark">
-                            {% if sonuc.trend_direction == 'improving' %}
-                                <h5 class="text-success mb-0">📈 {{ t['pos_trend'] }}</h5>
-                                <small>{{ t['pos_trend_desc'] }}</small>
-                            {% elif sonuc.trend_direction == 'declining' %}
-                                <h5 class="text-danger mb-0">📉 {{ t['neg_trend'] }}</h5>
-                                <small>{{ t['neg_trend_desc'] }}</small>
-                            {% else %}
-                                <h5 class="text-muted mb-0">➡️ {{ t['stable_trend'] }}</h5>
-                                <small>{{ t['stable_trend_desc'] }}</small>
-                            {% endif %}
+                        <div class="glass-card p-4 text-center h-100 border-0 bg-white bg-opacity-5">
+                            <small class="text-secondary text-uppercase fw-bold d-block mb-3 small tracking-widest">{{ t['risk_indicators']['zscore'] }}</small>
+                            <h3 class="fw-bold mb-3 {{ 'text-success text-glow-success' if sonuc.z_score > 2.9 else ('text-warning' if sonuc.z_score > 1.2 else 'text-danger') }}">
+                                {{ sonuc.z_score|round(2) }}
+                            </h3>
+                            <span class="badge border border-{{ 'success' if sonuc.z_score > 2.9 else ('warning' if sonuc.z_score > 1.2 else 'danger') }} text-{{ 'success' if sonuc.z_score > 2.9 else ('warning' if sonuc.z_score > 1.2 else 'danger') }} rounded-pill px-3 py-2 small fw-bold">
+                                {{ sonuc.z_score_note }}
+                            </span>
+                            <p class="small text-white-50 mt-3 mb-0">{{ t['risk_indicators']['zscore_desc'] }}</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <p><strong>{{ t['account_name'] }}:</strong> {{ musteri.account_name }}</p>
-                        <p><strong>{{ t['account_code'] }}:</strong> <code>{{ musteri.account_code }}</code></p>
-                        <p><strong>{{ t['req_amt'] }}:</strong> {{ "{:,.0f} {}".format(talep.request_amount, talep.currency if talep.currency else "TL") }}</p>
-                        <p><strong>{{ t['liquidity_ratio'] }}:</strong> {{ "{:,.2f}".format(musteri.liquidity_ratio) }}</p>
+                <!-- EXECUTIVE SUMMARY -->
+                <div class="glass-card p-4 mb-5 border-0" style="background: rgba(59, 130, 246, 0.05); border-left: 5px solid #3b82f6 !important;">
+                    <h5 class="fw-bold text-white mb-3 d-flex align-items-center">
+                        <i class="bi bi-cpu-fill me-3 text-info"></i>{{ t['executive_assessment'] }}
+                    </h5>
+                    <p class="text-white-50" style="line-height: 1.8; font-size: 1.05rem; font-weight: 300;">
+                        {{ sonuc.assessment }}
+                    </p>
+                </div>
+
+                <!-- CRITERIA TABLE -->
+                <div class="glass-card overflow-hidden border-0 bg-white bg-opacity-5 mb-5">
+                    <div class="p-4 bg-white bg-opacity-5 border-bottom border-white border-opacity-5">
+                        <h5 class="fw-bold m-0">{{ t['score_details'] }}</h5>
                     </div>
-                    <div class="col-md-6 text-md-end">
-                        <p><strong>{{ t['score'] }}:</strong> {{ sonuc.final_score|round(1) }} / 100</p>
-                        <p class="text-primary h5 fw-bold">{{ t['max_capacity'] }}: {{ "{:,.0f} TL".format(sonuc.max_capacity) }}</p>
-                        <p class="text-success fw-bold">{{ t['rec_limit'] }}: {{ "{:,.0f} TL".format(sonuc.recommended_limit) }}</p>
+                    <div class="table-responsive">
+                        <table class="table table-premium mb-0 align-middle">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">{{ t['criterion'] }}</th>
+                                    <th>{{ t['score'] }}</th>
+                                    <th>{{ t['weight'] }}</th>
+                                    <th class="pe-4 text-end">{{ t['points'] }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="ps-4">{{ t['historical_perf'] }}</td>
+                                    <td class="fw-bold">{{ sonuc.historical_score|round(1) }}</td>
+                                    <td class="text-secondary">45%</td>
+                                    <td class="pe-4 text-end fw-bold text-info">{{ (sonuc.historical_score * 0.45)|round(1) }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4">{{ t['future_proj'] }}</td>
+                                    <td class="fw-bold">{{ sonuc.future_score|round(1) }}</td>
+                                    <td class="text-secondary">30%</td>
+                                    <td class="pe-4 text-end fw-bold text-info">{{ (sonuc.future_score * 0.30)|round(1) }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4">{{ t['req_vol_ratio'] }}</td>
+                                    <td class="fw-bold">{{ sonuc.request_score|round(1) }}</td>
+                                    <td class="text-secondary">25%</td>
+                                    <td class="pe-4 text-end fw-bold text-info">{{ (sonuc.request_score * 0.25)|round(1) }}</td>
+                                </tr>
+                                <tr class="bg-white bg-opacity-5">
+                                    <td class="ps-4 fw-bold">{{ t['momentum_effect'] }}</td>
+                                    <td>-</td>
+                                    <td>-</td>
+                                    <td class="pe-4 text-end fw-bold {{ 'text-success' if sonuc.momentum_score >= 0 else 'text-danger' }}">
+                                        {{ '+' if sonuc.momentum_score > 0 }}{{ (sonuc.momentum_score * 15)|round(1) if sonuc.trend_direction == 'declining' else (sonuc.momentum_score * 5)|round(1) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                
-                <hr>
-                
-                <h5 class="fw-bold mb-3">{{ t['score_details'] }}</h5>
-                <table class="table table-hover">
-                    <thead class="bg-light">
-                        <tr>
-                            <th>{{ t['criterion'] }}</th>
-                            <th>{{ t['score'] }}</th>
-                            <th>{{ t['weight'] }}</th>
-                            <th>{{ t['points'] }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>{{ t['historical_perf'] }}</td>
-                            <td>{{ sonuc.historical_score|round(1) }}</td>
-                            <td>45%</td>
-                            <td>{{ (sonuc.historical_score * 0.45)|round(1) }}</td>
-                        </tr>
-                        <tr>
-                            <td>{{ t['future_proj'] }}</td>
-                            <td>{{ sonuc.future_score|round(1) }}</td>
-                            <td>30%</td>
-                            <td>{{ (sonuc.future_score * 0.30)|round(1) }}</td>
-                        </tr>
-                        <tr>
-                            <td>{{ t['req_vol_ratio'] }}</td>
-                            <td>{{ sonuc.request_score|round(1) }}</td>
-                            <td>25%</td>
-                            <td>{{ (sonuc.request_score * 0.25)|round(1) }}</td>
-                        </tr>
-                        <tr class="table-light">
-                            <td><strong>{{ t['momentum_effect'] }}</strong></td>
-                            <td>-</td>
-                            <td>-</td>
-                            <td class="{{ 'text-success' if sonuc.momentum_score >= 0 else 'text-danger' }}">
-                                <strong>{{ '+' if sonuc.momentum_score > 0 }}{{ (sonuc.momentum_score * 15)|round(1) if sonuc.trend_direction == 'declining' else (sonuc.momentum_score * 5)|round(1) }}</strong>
-                            </td>
-                        </tr>
-                    </tbody>
-                 </table>
-                
-                <hr>
 
-                <div class="row">
-                    <div class="col-md-12">
-                        <!-- Executive summary enlarged for intelligence report -->
-                        <div class="card bg-dark text-white border-primary mb-4">
-                            <div class="card-header bg-primary text-white py-3">
-                                <h5 class="mb-0"><i class="bi bi-cpu-fill me-2"></i>{{ t.executive_assessment }} - STRATEJİK ANALİZ</h5>
-                            </div>
-                            <div class="card-body p-4">
-                                <p class="lead mb-0" style="line-height: 1.8; font-size: 1.1rem; font-weight: 300;">
-                                    {{ sonuc.assessment }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-6">
-                        <div class="card border-primary h-100">
-                            <div class="card-header bg-primary text-white fw-bold">{{ t['scenario_analysis'] }}</div>
-                            <div class="card-body p-0">
-                                <table class="table table-sm mb-0">
-                                    <tbody>
-                                        {% for s in sonuc.scenarios %}
-                                        <tr>
-                                            <td class="ps-3 py-2">
-                                                <strong>{{ s.title }}</strong><br>
-                                                <small class="text-muted">{{ s.detail }}</small>
-                                            </td>
-                                            <td class="{{ 'text-success' if s.impact > 0 else 'text-danger' }} py-2">
-                                                {{ '+' if s.impact > 0 }}{{ s.impact }}
-                                            </td>
-                                            <td class="pe-3 py-2 text-end"><strong>{{ s.score|round(1) }}</strong></td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
+                <div class="d-flex flex-column flex-md-row gap-3 mt-5">
+                    <a href="{{ url_for('customer.customer_detail', customer_id=musteri.id) }}" class="btn btn-premium px-5 py-3">{{ t['back'] | upper }}</a>
+                    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary border-0 text-white-50 px-5 fw-bold d-flex align-items-center justify-content-center">{{ t['dashboard'] | upper }}</a>
                 </div>
             </div>
-        </div>
-        
-        <div class="mt-4 mb-5">
-            <a href="{{ url_for('customer_detail', customer_id=musteri.id) }}" class="btn btn-primary px-4">{{ t['back'] }}</a>
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary px-4">{{ t['dashboard'] }}</a>
         </div>
     </div>
+
+    <!-- Sponsor Modal -->
+    <div id="sponsorModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10001; backdrop-filter: blur(15px);">
+        <div class="glass-card" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 600px; width: 95%; padding: 40px;">
+            <div class="text-center mb-4">
+                <i class="bi bi-heart-fill text-danger display-4 mb-3 d-block text-glow-danger"></i>
+                <h2 class="fw-bold text-white">{{ t['sponsor_title'] }}</h2>
+            </div>
+            <p class="text-secondary lh-lg mb-4 text-center">
+                {{ t['sponsor_text'] }}
+            </p>
+            <div class="d-grid gap-3">
+                <a href="https://opencollective.com/dynamicai#category-CONNECT" target="_blank" class="btn btn-danger btn-lg py-3 fw-bold rounded-pill shadow-lg border-0">
+                    <i class="bi bi-cup-hot-fill me-2"></i> {{ t['donate_now'] }}
+                </a>
+                <button onclick="closeSponsorModal()" class="btn btn-outline-secondary border-0 text-white-50">{{ t['close'] | upper }}</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function openSponsorModal() { document.getElementById('sponsorModal').style.display = 'block'; }
+        function closeSponsorModal() { document.getElementById('sponsorModal').style.display = 'none'; }
+        function openFeedbackModal() { document.getElementById('feedbackModal').style.display = 'block'; }
+        function closeFeedbackModal() { document.getElementById('feedbackModal').style.display = 'none'; }
+        
+        const langT = {{ t | tojson }};
+
+        function submitFeedback() {
+            const message = document.getElementById('feedbackText').value;
+            const btn = document.getElementById('submitFeedbackBtn');
+            if (!message) { alert(langT['msg_empty_alert']); return; }
+            btn.disabled = true; btn.innerText = langT['msg_sending'];
+            fetch('{{ url_for('admin.submit_feedback') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(langT['msg_success']); closeFeedbackModal();
+                    document.getElementById('feedbackText').value = '';
+                } else { alert(langT['msg_error_prefix'] + data.message); }
+            })
+            .catch(err => { console.error(err); alert(langT['msg_generic_error']); })
+            .finally(() => { btn.disabled = false; btn.innerText = langT['send']; });
+        }
+    </script>
 </body>
 </html>

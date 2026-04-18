@@ -18,6 +18,14 @@ class ScenarioResult:
         self.score = score
 
 @dataclass
+class CreditRequestInput:
+    """Inputs for credit scoring request"""
+    request_amount: float
+    currency: str = 'TL'
+    period: str = '2024-01'
+    note: str = ""
+
+@dataclass
 class CreditScoreResult:
     """Credit scoring final result"""
     account_code: str
@@ -258,8 +266,7 @@ class CreditScorer:
         # 2. Risk Indicators (New Math)
         volatility = getattr(res, 'volatility', 0)
         if volatility > 20: 
-            # High instability warning (Customizing based on tr/en if needed, or using general ones)
-            notes.append(f"DÜZENSİZLİK ALARMI: Ödeme günleri arasında ortalamadan {volatility:.1f} gün sapma var. Nakit akışı belirsizliği yüksek." if lang == 'tr' else f"STABILITY ALARM: Payment delay variation is high ({volatility:.1f} days). Cash flow predictability is low.")
+            notes.append(translations[lang]['stability_alarm'].format(volatility=volatility))
             
         dscr = getattr(res, 'dscr_score', 1.5)
         if dscr < 1.0:

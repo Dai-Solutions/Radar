@@ -7,19 +7,16 @@ services:
     restart: always
     env_file:
       - .env
-    ports:
-      - "8005:8000" # Mapping external 8005 to internal 8000
+    network_mode: host
+    command: ["gunicorn", "--bind", "0.0.0.0:8005", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "app:app"]
     volumes:
+      - .:/app
       - ./data:/app/data
       - ./imports:/app/imports
-    networks:
-      - radar-network
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-networks:
-  radar-network:
-    driver: bridge
+# Networks removed as we are using network_mode: host
