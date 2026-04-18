@@ -1,6 +1,9 @@
 #!/bin/bash
 # Radar 1.0 - Production Deployment Script
 
+# Ensure we are in the script's directory
+cd "$(dirname "$0")"
+
 echo "🚀 Starting Radar deployment..."
 
 # 1. Pull latest code
