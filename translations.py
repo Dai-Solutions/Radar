@@ -219,6 +219,10 @@ translations = {
             'critical_name': 'Kritik Senaryo (%10)',
             'critical_desc': 'Faizlerin yükseldiği ve ödeme hızının yavaşladığı stres testi.'
         },
+        'chart_score_dist': 'Skor Dağılımı (Simülasyon)',
+        'impact_label': 'Skor Etkisi',
+        'confidence_interval': 'Güven Aralığı',
+        'trend_analysis': 'Trend Analizi',
         'stability_alarm': 'DÜZENSİZLİK ALARMI: Ödeme günleri arasında ortalamadan {volatility:.1f} gün sapma var. Nakit akışı belirsizliği yüksek.'
     },
     'en': {
@@ -373,6 +377,11 @@ translations = {
             'critical_name': 'Critical Scenario (10%)',
             'critical_desc': 'Stress test where interest rates rise and payment speed slows.'
         },
+        'chart_score_dist': 'Score Distribution (Simulation)',
+        'impact_label': 'Score Impact',
+        'confidence_interval': 'Confidence Interval',
+        'trend_analysis': 'Trend Analysis',
+        'stability_alarm': 'STABILITY ALARM: Payment delay variation is high ({volatility:.1f} days). Cash flow predictability is low.',
         'strategic_analysis': {
             'title': 'STRATEGIC VADE & LIMIT RECOMMENDATION',
             'vade_label': 'Recommended Vade Strategy',

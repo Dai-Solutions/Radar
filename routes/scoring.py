@@ -131,21 +131,23 @@ def report_view(talep_id):
         
     talep = db_session.query(CreditRequest).filter(CreditRequest.id == talep_id).first()
     
-    from credit_scoring import ScenarioResult
-    lang = flask_session.get('lang', 'tr')
-    if lang == 'tr':
-        scenarios = [
-            ScenarioResult("İyimser", "Ödemelerin düzenli devam etmesi", 5.0, skor.final_score + 5),
-            ScenarioResult("Kritik", "Yeni bir 30+ gün gecikme", -15.0, skor.final_score - 15)
-        ]
-    else:
-        scenarios = [
-            ScenarioResult("Optimistic", "Steady payments continue", 5.0, skor.final_score + 5),
-            ScenarioResult("Critical", "New 30+ day delay", -15.0, skor.final_score - 15)
-        ]
+    from credit_scoring import CreditRequestInput
     
+    # Re-calculate to get dynamic scenarios and experts
+    settings = get_settings()
+    scorer = CreditScorer(customer.id, db_session=db_session)
+    
+    # We use the request_amount from the talep record
+    req_input = CreditRequestInput(request_amount=talep.request_amount, currency=talep.currency)
+    
+    res_dynamic = scorer.calculate(
+        settings=settings,
+        request_input=req_input,
+        lang=lang
+    )
+
     class ResultWrapper:
-        def __init__(self, s, scens):
+        def __init__(self, s, dyn):
             self.credit_note = s.credit_note
             self.final_score = s.final_score
             self.decision_summary = s.decision_summary
@@ -159,12 +161,12 @@ def report_view(talep_id):
             self.assessment = s.assessment
             self.vade_days = s.vade_days
             self.vade_message = s.vade_message
-            self.scenarios = scens
+            self.scenarios = dyn.scenarios
             self.volatility = getattr(s, 'volatility', 0) or 0
             self.dscr_score = getattr(s, 'dscr_score', 0) or 0
             self.z_score = getattr(s, 'z_score', 0) or 0
             self.z_score_note = getattr(s, 'z_score_note', 'N/A') or 'N/A'
 
-    sonuc = ResultWrapper(skor, scenarios)
+    sonuc = ResultWrapper(skor, res_dynamic)
     db_session.close()
     return render_template('rapor.html', musteri=customer, talep=talep, skor=skor, sonuc=sonuc)
