@@ -3,7 +3,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 from flask import Flask, render_template, session
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from dotenv import load_dotenv
 
 # Shared extensions
@@ -28,15 +27,7 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.getenv('FLASK_SECRET_KEY', 'radar_1_0_secret_key')
     
-    # Prefix configuration for server deployment
-    APP_PREFIX = os.getenv('APP_PREFIX', '/solutions/radar')
-    
-    # Wrap the application with DispatcherMiddleware for sub-path support
-    app.wsgi_app = DispatcherMiddleware(Flask('dummy'), {
-        APP_PREFIX: app.wsgi_app
-    })
-    
-    # Apply ProxyFix to handle X-Forwarded-Proto from Nginx
+    # Apply ProxyFix to handle X-Forwarded-Proto and X-Forwarded-Prefix from Nginx
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     
     # Session Cookie & Security Configuration
