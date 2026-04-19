@@ -123,9 +123,10 @@ def register():
         
         # Send Branded Verification Email
         try:
-            from extensions import ts
-            token = ts.dumps(email, salt='email-confirm-key')
-            verify_url = url_for('auth.verify_email', token=token, _external=True, _scheme='https')
+            verify_token = ts.dumps(email, salt='email-confirm-key')
+            domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
+            prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
+            verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
             send_welcome_email(email, full_name, verify_url)
             flash(f"{current_app.config['APP_VERSION']} dünyasına Hoş Geldiniz! Dynamic AI'dan gelen onay e-postasını lütfen kontrol edin.", 'success')
         except Exception as e:
@@ -158,7 +159,10 @@ def verify_email(token):
 
 @auth_bp.route('/login/google')
 def login_google():
-    redirect_uri = url_for('auth.authorize', _external=True, _scheme='https')
+    domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
+    prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
+    # Build absolute redirect URI manually to bypass proxy header confusion
+    redirect_uri = f"https://{domain}{prefix}/login/google/callback"
     return oauth.google.authorize_redirect(redirect_uri, prompt='select_account')
 
 @auth_bp.route('/login/google/callback')
@@ -178,9 +182,10 @@ def authorize():
             session_db.refresh(user)
             
             try:
-                from extensions import ts
                 verify_token = ts.dumps(email, salt='email-confirm-key')
-                verify_url = url_for('auth.verify_email', token=verify_token, _external=True, _scheme='https')
+                domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
+                prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
+                verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
                 send_welcome_email(email, name, verify_url)
                 flash(f"{current_app.config['APP_VERSION']} dünyasına Hoş Geldiniz! Lütfen mailinize gönderdiğimiz onay mailini kontrol ediniz.", 'info')
             except Exception as e:
