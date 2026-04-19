@@ -109,10 +109,6 @@
                         {{ total_users }} {{ t['active_users'] }}
                     </div>
 
-                    <a class="nav-link px-3 text-glow-danger" href="#" onclick="openSponsorModal(); return false;">
-                        <i class="bi bi-heart-fill me-2"></i>{{ t['sponsor'] | upper }}
-                    </a>
-
                     <div class="lang-switch-pill d-flex align-items-center mx-2">
                         <a href="{{ url_for('main.set_language', lang='tr') }}" class="lang-link px-2 {{ 'active' if lang == 'tr' else '' }}">TR</a>
                         <span class="text-secondary opacity-25">|</span>
@@ -123,15 +119,24 @@
                         <i class="bi bi-chat-dots me-2"></i>{{ t['feedback'] | upper }}
                     </a>
 
-                    <a class="nav-link px-3 text-glow-info" href="{{ url_for('main.guvenlik') }}">
-                        <i class="bi bi-shield-fill-check fs-5 me-2"></i>{{ t['security'] | upper }}
-                    </a>
+                    <div class="d-flex align-items-center bg-dark px-3 py-1 rounded-pill border border-secondary border-opacity-25" style="white-space: nowrap;">
+                        <a class="nav-link px-2 py-0 fw-bold" style="font-size: 0.8rem;" href="{{ url_for('customer.new_customer') }}">{{ t['new_customer'] | upper }}</a>
+                        <span class="text-secondary opacity-25 px-1">|</span>
+                        <a class="nav-link px-2 py-0 fw-bold" style="font-size: 0.8rem;" href="{{ url_for('admin.import_excel') }}">{{ t['import_excel'] | upper }}</a>
+                        <span class="text-secondary opacity-25 px-1">|</span>
+                        <a class="nav-link px-2 py-0 fw-bold active" style="font-size: 0.8rem;" href="{{ url_for('main.index') }}">{{ t['dashboard'] | upper }}</a>
+                    </div>
 
                     <div class="vr mx-2 bg-secondary opacity-25 d-none d-lg-block"></div>
 
-                    <a class="nav-link px-2" href="{{ url_for('customer.new_customer') }}">{{ t['new_customer'] | upper }}</a>
-                    <a class="nav-link px-2" href="{{ url_for('admin.import_excel') }}">{{ t['import_excel'] | upper }}</a>
-                    <a class="nav-link px-2 active" href="{{ url_for('main.index') }}">{{ t['dashboard'] | upper }}</a>
+                    <div class="d-flex align-items-center">
+                        <a class="nav-link px-2 text-glow-info d-flex align-items-center" href="{{ url_for('main.guvenlik') }}">
+                            <i class="bi bi-shield-fill-check fs-5 me-1"></i><span style="font-size: 0.8rem; font-weight: bold;">GÜVENLİK</span>
+                        </a>
+                        <a class="nav-link px-2 text-glow-danger" href="https://opencollective.com/dynamicai#category-CONNECT" target="_blank" title="Sponsor">
+                            <i class="bi bi-heart-fill fs-5"></i>
+                        </a>
+                    </div>
 
                     <div class="vr mx-2 bg-secondary opacity-25 d-none d-lg-block"></div>
 
