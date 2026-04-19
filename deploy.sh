@@ -12,11 +12,11 @@ git pull origin main
 
 # 2. Rebuild and restart containers
 echo "🏗️ Rebuilding Docker containers..."
-docker-compose up -d --build radar-app
+sudo docker compose up -d --build radar-app
 
 # 3. Clean up unused images (optional)
 echo "🧹 Cleaning up old Docker images..."
-docker image prune -f
+sudo docker image prune -f
 
 echo "✅ Radar is now up and running on port 8005!"
 echo "📍 Access: https://daisoftwares.com/solutions/radar/login"
