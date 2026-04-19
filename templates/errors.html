@@ -1,24 +1,73 @@
-{% extends "index.html" %}
-
-{% block content %}
-<div class="container py-5 text-center">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card bg-dark border-secondary p-5" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                <h1 class="display-1 text-primary mb-4" style="font-family: 'Outfit', sans-serif; font-weight: 800;">
-                    {{ code }}
-                </h1>
-                <h2 class="text-white mb-4">{{ message }}</h2>
-                <p class="text-secondary mb-5">
-                    Radar sistemi şu anda bu isteği yerine getiremiyor. Lütfen ana sayfaya dönün veya daha sonra tekrar deneyin.
-                </p>
-                <div class="d-flex justify-content-center gap-3">
-                    <a href="{{ url_for('main.index') }}" class="btn btn-primary btn-lg px-5" style="border-radius: 12px; font-weight: 600;">
-                        Ana Sayfaya Dön
-                    </a>
-                </div>
-            </div>
-        </div>
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hata - Radar 1.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #ffffff;
+            --accent: #3b82f6;
+            --bg: #111111;
+            --card: #1a1a1a;
+            --text-dim: #999999;
+        }
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .error-card {
+            background: var(--card);
+            padding: 4rem 3rem;
+            border-radius: 24px;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+        }
+        .code {
+            font-size: 6rem;
+            font-weight: 800;
+            margin: 0;
+            background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1;
+        }
+        h2 { font-size: 1.8rem; margin: 1.5rem 0 1rem 0; font-weight: 600; }
+        p { color: var(--text-dim); margin-bottom: 2.5rem; line-height: 1.6; }
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+        .btn:hover { transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <div class="error-card">
+        <div class="code">{{ code }}</div>
+        <h2>{{ message }}</h2>
+        <p>
+            Radar sistemi şu anda bu isteği yerine getiremiyor. Lütfen ana sayfaya dönün veya daha sonra tekrar deneyin.
+        </p>
+        <a href="/solutions/radar/" class="btn">
+            Ana Sayfaya Dön
+        </a>
     </div>
-</div>
-{% endblock %}
+</body>
+</html>
