@@ -30,6 +30,9 @@ def create_app():
     # Apply ProxyFix to handle X-Forwarded-Proto and X-Forwarded-Prefix from Nginx
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     
+    # Prefix configuration for internal logic (branding/cookies)
+    APP_PREFIX = os.getenv('APP_PREFIX', '/solutions/radar')
+    
     # Session Cookie & Security Configuration
     app.config['SESSION_COOKIE_NAME'] = 'radar_session_id'
     app.config['SESSION_COOKIE_PATH'] = APP_PREFIX
