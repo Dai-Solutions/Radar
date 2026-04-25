@@ -11,74 +11,105 @@ def new_customer():
         db_session = get_session()
         account_code = request.form.get('account_code', '').strip()
         account_name = request.form.get('account_name', '').strip()
-        
+
         if not account_code or not account_name:
+            db_session.close()
             flash('Hesap kodu ve ismi zorunludur', 'error')
             return redirect(url_for('customer.new_customer'))
-            
-        new_c = Customer(
-            user_id=current_user.id,
-            is_sample=False,
-            account_code=account_code,
-            account_name=account_name,
-            tax_no=request.form.get('tax_no', ''),
-            phone=request.form.get('phone', ''),
-            email=request.form.get('email', ''),
-            equity=float(request.form.get('equity', '0') or 0),
-            annual_net_profit=float(request.form.get('net_profit', '0') or 0),
-            current_assets=float(request.form.get('current_assets', '0') or 0),
-            short_term_liabilities=float(request.form.get('st_liabilities', '0') or 0)
-        )
-        
-        if new_c.short_term_liabilities > 0:
-            new_c.liquidity_ratio = new_c.current_assets / new_c.short_term_liabilities
-        else:
-            new_c.liquidity_ratio = 1.0
-            
-        db_session.add(new_c)
-        db_session.commit()
-        db_session.close()
-        
-        flash(f'{account_name} başarıyla oluşturuldu', 'success')
-        return redirect(url_for('main.index'))
+
+        try:
+            from credit_scoring import CreditScorer
+            raw_sector = request.form.get('sector', 'general').lower().strip()
+            sector = raw_sector if raw_sector in CreditScorer.VALID_SECTORS else 'general'
+
+            new_c = Customer(
+                user_id=current_user.id,
+                is_sample=False,
+                account_code=account_code,
+                account_name=account_name,
+                tax_no=request.form.get('tax_no', ''),
+                phone=request.form.get('phone', ''),
+                email=request.form.get('email', ''),
+                equity=float(request.form.get('equity', '0') or 0),
+                annual_net_profit=float(request.form.get('net_profit', '0') or 0),
+                current_assets=float(request.form.get('current_assets', '0') or 0),
+                short_term_liabilities=float(request.form.get('st_liabilities', '0') or 0),
+                sector=sector,
+            )
+
+            if new_c.short_term_liabilities > 0:
+                new_c.liquidity_ratio = new_c.current_assets / new_c.short_term_liabilities
+            else:
+                new_c.liquidity_ratio = 1.0
+
+            db_session.add(new_c)
+            db_session.commit()
+            flash(f'{account_name} başarıyla oluşturuldu', 'success')
+            return redirect(url_for('main.index'))
+        except Exception:
+            db_session.rollback()
+            raise
+        finally:
+            db_session.close()
+
     return render_template('yeni_musteri.html')
+
 
 @customer_bp.route('/customer/<int:customer_id>')
 @login_required
 def customer_detail(customer_id):
     session = get_session()
-    customer = session.query(Customer).filter(
-        (Customer.id == customer_id) & 
-        ((Customer.is_sample == True) | (Customer.user_id == current_user.id))
-    ).first()
-    
-    if not customer:
-        session.close()
-        return "Yetkiniz yok veya müşteri bulunamadı", 403
-    
-    aging_records = session.query(AgingRecordDB).filter(
-        AgingRecordDB.customer_id == customer_id
-    ).order_by(AgingRecordDB.period.desc()).all()
-    
-    requests = session.query(CreditRequest).filter(
-        CreditRequest.customer_id == customer_id
-    ).order_by(CreditRequest.request_date.desc()).all()
-    
-    request_list = []
-    for r in requests:
-        score = session.query(CreditScore).filter(
-            CreditScore.credit_request_id == r.id
+    try:
+        customer = session.query(Customer).filter(
+            (Customer.id == customer_id) &
+            ((Customer.is_sample == True) | (Customer.user_id == current_user.id))
         ).first()
-        
-        request_list.append({
-            'id': r.id,
-            'amount': r.request_amount,
-            'currency': r.currency,
-            'date': r.request_date,
-            'status': r.approval_status,
-            'note': score.credit_note if score else '-',
-            'score': score.final_score if score else 0
-        })
-    
-    session.close()
-    return render_template('musteri_detay.html', customer=customer, aging_records=aging_records, requests=request_list)
+
+        if not customer:
+            return "Yetkiniz yok veya müşteri bulunamadı", 403
+
+        aging_records = session.query(AgingRecordDB).filter(
+            AgingRecordDB.customer_id == customer_id
+        ).order_by(AgingRecordDB.period.desc()).all()
+
+        processed_aging = []
+        if len(aging_records) > 12:
+            processed_aging = aging_records[:12]
+            historical = aging_records[12:]
+            summary = {
+                'period': 'Geçmiş Dönem Özeti',
+                'overdue': sum(h.overdue for h in historical),
+                'days_1_30': sum(h.days_1_30 for h in historical),
+                'days_31_60': sum(h.days_31_60 for h in historical),
+                'days_61_90': sum(h.days_61_90 for h in historical),
+                'days_90_plus': sum(h.days_90_plus for h in historical),
+                'total_debt': sum(h.total_debt for h in historical),
+                'is_summary': True
+            }
+            processed_aging.append(summary)
+        else:
+            processed_aging = aging_records
+
+        requests = session.query(CreditRequest).filter(
+            CreditRequest.customer_id == customer_id
+        ).order_by(CreditRequest.request_date.desc()).all()
+
+        request_list = []
+        for r in requests:
+            score = session.query(CreditScore).filter(
+                CreditScore.credit_request_id == r.id
+            ).first()
+            request_list.append({
+                'id': r.id,
+                'amount': r.request_amount,
+                'currency': r.currency,
+                'date': r.request_date,
+                'status': r.approval_status,
+                'note': score.credit_note if score else '-',
+                'score': score.final_score if score else 0
+            })
+
+        return render_template('musteri_detay.html', customer=customer,
+                               aging_records=processed_aging, requests=request_list)
+    finally:
+        session.close()
