@@ -1,13 +1,16 @@
 from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app, send_file, jsonify
 from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
 import os
 import json
 import time
+import uuid
 
 from database import get_session, Customer, AgingRecord as AgingRecordDB
 from excel_import import ExcelImporter
 from extensions import mail
 from flask_mail import Message
+from routes.auth import admin_required
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -16,7 +19,10 @@ SETTINGS_PATH = os.path.join(DATA_DIR, 'settings.json')
 IMPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'imports')
 
 _settings_cache = {'data': None, 'time': 0}
-CACHE_TTL = 300 
+CACHE_TTL = 300
+
+ALLOWED_EXCEL_EXT = {'.xlsx', '.xls', '.csv'}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 def get_settings():
     global _settings_cache
@@ -24,18 +30,23 @@ def get_settings():
     if _settings_cache['data'] and (now - _settings_cache['time'] < CACHE_TTL):
         return _settings_cache['data']
         
+    DEFAULTS = {"interest_rate": 45.0, "inflation_rate": 55.0, "sector_risk": 1.0,
+                "monte_carlo_iterations": 500}
+
     if not os.path.exists(SETTINGS_PATH):
-        default_settings = {"interest_rate": 45.0, "inflation_rate": 55.0, "sector_risk": 1.0}
         os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
         with open(SETTINGS_PATH, 'w') as f:
-            json.dump(default_settings, f)
-        _settings_cache = {'data': default_settings, 'time': now}
-        return default_settings
-        
+            json.dump(DEFAULTS, f)
+        _settings_cache = {'data': DEFAULTS, 'time': now}
+        return DEFAULTS
+
     with open(SETTINGS_PATH, 'r') as f:
         data = json.load(f)
-        _settings_cache = {'data': data, 'time': now}
-        return data
+    # eksik anahtarları varsayılanlarla doldur (geriye dönük uyumlu)
+    for k, v in DEFAULTS.items():
+        data.setdefault(k, v)
+    _settings_cache = {'data': data, 'time': now}
+    return data
 
 def save_settings(settings):
     global _settings_cache
@@ -46,11 +57,13 @@ def save_settings(settings):
 
 @admin_bp.route('/update_settings', methods=['POST'])
 @login_required
+@admin_required
 def update_settings():
     settings = {
         'interest_rate': float(request.form.get('interest_rate', 45.0)),
         'inflation_rate': float(request.form.get('inflation_rate', 55.0)),
-        'sector_risk': float(request.form.get('sector_risk', 1.0))
+        'sector_risk': float(request.form.get('sector_risk', 1.0)),
+        'monte_carlo_iterations': int(request.form.get('monte_carlo_iterations', 500))
     }
     save_settings(settings)
     flash('Ayarlar güncellendi', 'success')
@@ -58,20 +71,50 @@ def update_settings():
 
 @admin_bp.route('/import_excel', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def import_excel():
     if request.method == 'POST':
         if 'excel_file' not in request.files:
             flash('Dosya seçilmedi', 'error')
             return redirect(url_for('admin.import_excel'))
-        
+
         file = request.files['excel_file']
+        if not file or not file.filename:
+            flash('Dosya seçilmedi', 'error')
+            return redirect(url_for('admin.import_excel'))
+
+        original = secure_filename(file.filename)
+        ext = os.path.splitext(original)[1].lower()
+        if ext not in ALLOWED_EXCEL_EXT:
+            flash('Sadece .xlsx, .xls veya .csv dosyaları kabul edilir.', 'error')
+            return redirect(url_for('admin.import_excel'))
+
+        # Boyut kontrolü (stream cursor üzerinden)
+        file.stream.seek(0, os.SEEK_END)
+        size = file.stream.tell()
+        file.stream.seek(0)
+        if size > MAX_UPLOAD_BYTES:
+            flash('Dosya 10 MB sınırını aşıyor.', 'error')
+            return redirect(url_for('admin.import_excel'))
+        if size == 0:
+            flash('Dosya boş.', 'error')
+            return redirect(url_for('admin.import_excel'))
+
         os.makedirs(IMPORTS_DIR, exist_ok=True)
-        temp_path = os.path.join(IMPORTS_DIR, f"tmp_{file.filename}")
+        # Path traversal'ı engellemek için isimde sadece secure_filename + uuid kullan
+        safe_name = f"upload_{uuid.uuid4().hex}{ext}"
+        temp_path = os.path.join(IMPORTS_DIR, safe_name)
         file.save(temp_path)
-        
-        importer = ExcelImporter()
-        aging_recs, cust_map = importer.excel_to_aging_records(temp_path)
-        balance_list = importer.excel_to_balance_sheet(temp_path)
+
+        try:
+            importer = ExcelImporter()
+            aging_recs, cust_map = importer.excel_to_aging_records(temp_path)
+            balance_list = importer.excel_to_balance_sheet(temp_path)
+        finally:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
         
         session = get_session()
         for b in balance_list:
@@ -83,10 +126,13 @@ def import_excel():
             
             c.account_name = b['account_name']
             c.equity = b['equity']
-            c.net_profit = b.get('net_profit', 0)
+            c.annual_net_profit = b.get('net_profit', 0)
             c.current_assets = b['current_assets']
             c.short_term_liabilities = b['short_term_liabilities']
             c.liquidity_ratio = b['liquidity_ratio']
+            c.sector_risk_factor = b.get('sector_risk_factor', 1.0)
+            if b.get('tax_no'):
+                c.tax_no = b['tax_no']
             
         session.commit()
         session.close()
@@ -96,6 +142,7 @@ def import_excel():
 
 @admin_bp.route('/download_sample')
 @login_required
+@admin_required
 def download_sample():
     sample_path = os.path.join(current_app.root_path, 'static', 'radar_1_0_sample.xlsx')
     importer = ExcelImporter()

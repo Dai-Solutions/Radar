@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_user, logout_user, current_user, UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
+from markupsafe import escape
 import datetime
 import time
 
@@ -17,6 +18,7 @@ class UserWrapper(UserMixin):
         self.email = user_obj.email
         self.full_name = user_obj.full_name
         self.email_verified = getattr(user_obj, 'email_verified', False)
+        self.is_admin = bool(getattr(user_obj, 'is_admin', False))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -28,14 +30,17 @@ def load_user(user_id):
     return None
 
 def send_welcome_email(email, full_name, verify_url):
+    safe_name = escape(full_name or '')
+    safe_url = escape(verify_url)
+    safe_version = escape(current_app.config['APP_VERSION'])
     html_content = f"""
     <div style="font-family: 'Outfit', sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #333; border-radius: 12px; background-color: #111; color: #fff;">
         <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #3b82f6; margin: 0;">{current_app.config['APP_VERSION']}</h1>
+            <h1 style="color: #3b82f6; margin: 0;">{safe_version}</h1>
             <p style="color: #999; font-size: 14px; margin: 5px 0;">Let dai do it for you</p>
         </div>
-        
-        <p>Merhaba <strong>{full_name}</strong>,</p>
+
+        <p>Merhaba <strong>{safe_name}</strong>,</p>
         
         <p>DAI Technology'nin geliştirdiği bu test uygulamasına giriş yaptığın için çok teşekkürler!</p>
         
@@ -49,7 +54,7 @@ def send_welcome_email(email, full_name, verify_url):
         <p>Ayrıca, bağımsız ve açık kaynaklı projeler üretmeye devam edebilmemiz için topluluk desteği çok önemli. Eğer vizyonumuzu ve uygulamalarımızı beğeniyorsan, bize yapacağın küçük bir bağış/destek, bu projeleri hayatta tutmamız ve "pazar" yerine "insanlara" hizmet etmeye devam etmemiz için en büyük gücümüz olacak.</p>
         
         <div style="text-align: center; margin: 40px 0;">
-            <a href="{verify_url}" style="background-color: #3b82f6; color: white; padding: 15px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">HESABIMI DOĞRULA VE GİRİŞ YAP</a>
+            <a href="{safe_url}" style="background-color: #3b82f6; color: white; padding: 15px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">HESABIMI DOĞRULA VE GİRİŞ YAP</a>
         </div>
  
         <p style="color: #999; font-size: 14px;">Desteğin ve geri bildirimlerin için şimdiden teşekkürler!<br>Görüşmek üzere,</p>
@@ -64,6 +69,29 @@ def send_welcome_email(email, full_name, verify_url):
     msg.html = html_content
     mail.send(msg)
 
+
+def is_admin_user(user):
+    """Check if a user (UserWrapper or User row) has admin privileges."""
+    if user is None:
+        return False
+    if getattr(user, 'is_admin', False):
+        return True
+    admin_email = (current_app.config.get('ADMIN_EMAIL') or '').strip().lower()
+    user_email = (getattr(user, 'email', '') or '').strip().lower()
+    return bool(admin_email) and admin_email == user_email
+
+
+def admin_required(f):
+    """Decorator that allows only admins through."""
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated or not is_admin_user(current_user):
+            flash('Bu işlem için yetkiniz yok.', 'error')
+            return redirect(url_for('main.index'))
+        return f(*args, **kwargs)
+    return wrapper
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -72,24 +100,24 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password')
-        
+
         db_session = get_session()
-        user = db_session.query(User).filter(User.email == email).first()
-        
-        if user and user.password_hash and check_password_hash(user.password_hash, password):
-            if not getattr(user, 'email_verified', False):
-                flash('Lütfen hesabınızı e-postanıza gönderdiğimiz onay maili ile doğrulayın.', 'error')
-                db_session.close()
-                return redirect(url_for('auth.login'))
-                
-            login_user(UserWrapper(user))
+        try:
+            user = db_session.query(User).filter(User.email == email).first()
+
+            if user and user.password_hash and check_password_hash(user.password_hash, password):
+                if not getattr(user, 'email_verified', False):
+                    flash('Lütfen hesabınızı e-postanıza gönderdiğimiz onay maili ile doğrulayın.', 'error')
+                    return redirect(url_for('auth.login'))
+
+                login_user(UserWrapper(user))
+                flash(f'Hoş geldiniz, {user.full_name or email}', 'success')
+                return redirect(url_for('main.index'))
+
+            flash('Geçersiz e-posta veya şifre.', 'error')
+        finally:
             db_session.close()
-            flash(f'Hoş geldiniz, {user.full_name or email}', 'success')
-            return redirect(url_for('main.index'))
-        
-        db_session.close()
-        flash('Geçersiz e-posta veya şifre.', 'error')
-    
+
     return render_template('login.html')
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
@@ -103,25 +131,28 @@ def register():
         password = request.form.get('password')
         
         session_db = get_session()
-        existing_user = session_db.query(User).filter(User.email == email).first()
-        
-        if existing_user:
+        try:
+            existing_user = session_db.query(User).filter(User.email == email).first()
+            if existing_user:
+                lang = session.get('lang', 'tr')
+                flash(translations[lang]['already_registered_hint'], 'error')
+                return redirect(url_for('auth.register'))
+
+            new_user = User(
+                full_name=full_name,
+                email=email,
+                password_hash=generate_password_hash(password),
+                is_active=True,
+                email_verified=False
+            )
+            session_db.add(new_user)
+            session_db.commit()
+        except Exception:
+            session_db.rollback()
+            raise
+        finally:
             session_db.close()
-            lang = session.get('lang', 'tr')
-            flash(translations[lang]['already_registered_hint'], 'error')
-            return redirect(url_for('auth.register'))
-            
-        new_user = User(
-            full_name=full_name,
-            email=email,
-            password_hash=generate_password_hash(password),
-            is_active=True,
-            email_verified=False
-        )
-        session_db.add(new_user)
-        session_db.commit()
-        
-        # Send Branded Verification Email
+
         try:
             verify_token = ts.dumps(email, salt='email-confirm-key')
             domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
@@ -132,8 +163,7 @@ def register():
         except Exception as e:
             current_app.logger.error(f"Mail sending failed: {e}")
             flash('Kaydınız yapıldı ancak onay e-postası gönderilemedi.', 'warning')
-            
-        session_db.close()
+
         return redirect(url_for('auth.login'))
         
     return render_template('register.html')
@@ -148,13 +178,14 @@ def verify_email(token):
         return redirect(url_for('auth.login'))
         
     session_db = get_session()
-    user = session_db.query(User).filter(User.email == email).first()
-    if user:
-        user.email_verified = True
-        session_db.commit()
-        flash(f"{current_app.config['APP_VERSION']} dünyasına hoş geldiniz! Hesabınız başarıyla doğrulandı.", 'success')
-    
-    session_db.close()
+    try:
+        user = session_db.query(User).filter(User.email == email).first()
+        if user:
+            user.email_verified = True
+            session_db.commit()
+            flash(f"{current_app.config['APP_VERSION']} dünyasına hoş geldiniz! Hesabınız başarıyla doğrulandı.", 'success')
+    finally:
+        session_db.close()
     return redirect(url_for('auth.login'))
 
 @auth_bp.route('/login/google')
@@ -172,36 +203,36 @@ def authorize():
     if userinfo:
         email = userinfo['email'].strip().lower()
         session_db = get_session()
-        user = session_db.query(User).filter(User.email == email).first()
-        
-        if not user:
-            name = userinfo.get('name', '')
-            user = User(email=email, full_name=name, is_active=True, email_verified=False)
-            session_db.add(user)
-            session_db.commit()
-            session_db.refresh(user)
-            
-            try:
-                verify_token = ts.dumps(email, salt='email-confirm-key')
-                domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
-                prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
-                verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
-                send_welcome_email(email, name, verify_url)
-                flash(f"{current_app.config['APP_VERSION']} dünyasına Hoş Geldiniz! Lütfen mailinize gönderdiğimiz onay mailini kontrol ediniz.", 'info')
-            except Exception as e:
-                current_app.logger.error(f"Branded mail failed: {e}")
-                
-            session_db.close()
-            return redirect(url_for('auth.login'))
-        else:
+        try:
+            user = session_db.query(User).filter(User.email == email).first()
+
+            if not user:
+                name = userinfo.get('name', '')
+                user = User(email=email, full_name=name, is_active=True, email_verified=False)
+                session_db.add(user)
+                session_db.commit()
+                session_db.refresh(user)
+
+                try:
+                    verify_token = ts.dumps(email, salt='email-confirm-key')
+                    domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
+                    prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
+                    verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
+                    send_welcome_email(email, name, verify_url)
+                    flash(f"{current_app.config['APP_VERSION']} dünyasına Hoş Geldiniz! Lütfen mailinize gönderdiğimiz onay mailini kontrol ediniz.", 'info')
+                except Exception as e:
+                    current_app.logger.error(f"Branded mail failed: {e}")
+
+                return redirect(url_for('auth.login'))
+
             if not getattr(user, 'email_verified', False):
                 flash('Lütfen e-postanıza gönderdiğimiz onay linkine tıklayın.', 'info')
-                session_db.close()
                 return redirect(url_for('auth.login'))
-        
-        login_user(UserWrapper(user))
-        session_db.close()
-        return redirect(url_for('main.index'))
+
+            login_user(UserWrapper(user))
+            return redirect(url_for('main.index'))
+        finally:
+            session_db.close()
     
     flash('Giriş başarısız oldu.', 'error')
     return redirect(url_for('auth.login'))
