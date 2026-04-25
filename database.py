@@ -17,6 +17,7 @@ class User(Base):
     full_name = Column(String)
     google_id = Column(String, unique=True)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -50,7 +51,10 @@ class Customer(Base):
     # NEW: Cash Flow Data for DSCR
     interest_expenses = Column(Float, default=0.0)
     principal_payments = Column(Float, default=0.0)
-    
+
+    # Sektör — Z-Score katsayı setini belirler
+    sector = Column(String(32), default='general')
+
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User")
@@ -78,7 +82,7 @@ class CreditRequest(Base):
     customer_id = Column(Integer, ForeignKey('customers.id'), nullable=False)
     request_amount = Column(Float, nullable=False)
     currency = Column(String(5), default='TL')
-    request_date = Column(Date, default=datetime.utcnow().date())
+    request_date = Column(Date, default=lambda: datetime.utcnow().date())
     approval_status = Column(String, default='Pending')
     
     customer = relationship("Customer", back_populates="credit_requests")
@@ -118,7 +122,14 @@ class CreditScore(Base):
     
     assessment = Column(Text)
     decision_summary = Column(Text)
-    
+    scenarios_json = Column(Text)
+
+    # Faz 4 — Ek analiz metrikleri
+    piotroski_score = Column(Integer)   # 0-9 puan
+    piotroski_grade = Column(String(8)) # Güçlü / Orta / Zayıf
+    icr_score = Column(Float)           # Interest Coverage Ratio
+    aging_concentration = Column(Float) # 90+ gün yüzdesi
+
     # Hierarchical Vade Result
     vade_days = Column(Integer)
     vade_message = Column(String)
@@ -140,7 +151,7 @@ class Feedback(Base):
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
 
 _engine = None
-_session_factory = None
+_Session = None  # tek scoped_session registry
 
 def get_db_uri():
     uri = os.getenv('DATABASE_URL')
@@ -160,7 +171,8 @@ def get_engine():
                 pool_size=10,
                 max_overflow=20,
                 pool_timeout=30,
-                pool_recycle=1800
+                pool_recycle=1800,
+                pool_pre_ping=True,
             )
         else:
             _engine = create_engine(uri, connect_args={"check_same_thread": False})
@@ -171,12 +183,17 @@ def init_db():
     Base.metadata.create_all(engine)
     return engine
 
+def _ensure_session_registry():
+    global _Session
+    if _Session is None:
+        _Session = scoped_session(sessionmaker(bind=get_engine(), expire_on_commit=False))
+    return _Session
+
 def get_session():
-    global _session_factory
-    if _session_factory is None:
-        engine = get_engine()
-        _session_factory = sessionmaker(bind=engine)
-    
-    # Return a scoped session session
-    s = scoped_session(_session_factory)
-    return s()
+    """Return a thread-local session bound to the singleton scoped_session registry."""
+    return _ensure_session_registry()()
+
+def remove_session():
+    """Tear down the thread-local session — bağla teardown_appcontext."""
+    if _Session is not None:
+        _Session.remove()

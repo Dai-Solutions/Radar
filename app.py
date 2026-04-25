@@ -16,7 +16,7 @@ from routes.scoring import scoring_bp
 from routes.admin import admin_bp
 
 # Logic & Utils
-from database import init_db, get_session, User
+from database import init_db, get_session, remove_session, User
 from translations import translations
 
 def create_app():
@@ -26,6 +26,8 @@ def create_app():
     
     app = Flask(__name__)
     app.secret_key = os.getenv('FLASK_SECRET_KEY', 'radar_1_0_secret_key')
+    # Global upload tavanı (10 MB) — admin Excel import'u için yeterli, DoS yüzeyi azaltır
+    app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
     
     # Apply ProxyFix to handle X-Forwarded-Proto and X-Forwarded-Prefix from Nginx
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
@@ -80,26 +82,40 @@ def create_app():
     app.register_blueprint(scoring_bp)
     app.register_blueprint(admin_bp)
     
-    # Context Processor
+    # Çeviri sözlüklerini app start'ta bir kez prefix ile materialize et
+    import json as _json
+    _prefix = app.config.get('APP_PREFIX', os.getenv('APP_PREFIX', '/solutions/radar'))
+    _translations_resolved = {
+        _lang: _json.loads(_json.dumps(_dict).replace('{prefix}', _prefix))
+        for _lang, _dict in translations.items()
+    }
+
+    # User count cache (60 saniye TTL) — her request'te COUNT(*) atmamak için
+    _user_count_cache = {'value': 0, 'expires_at': 0.0}
+    USER_COUNT_TTL = 60.0
+
+    def _get_user_count():
+        import time as _time
+        now = _time.time()
+        if now < _user_count_cache['expires_at']:
+            return _user_count_cache['value']
+        s = get_session()
+        try:
+            count = s.query(User).count()
+        finally:
+            s.close()
+        _user_count_cache['value'] = count
+        _user_count_cache['expires_at'] = now + USER_COUNT_TTL
+        return count
+
     @app.context_processor
     def inject_global_vars():
         lang = session.get('lang', 'tr')
-        
-        # Handle prefix in translations (simple string replacement for the dict)
-        prefix = app.config.get('APP_PREFIX', os.getenv('APP_PREFIX', '/solutions/radar'))
-        import json
-        t_raw = json.dumps(translations[lang])
-        t_formatted = json.loads(t_raw.replace('{prefix}', prefix))
-        
-        db_session = get_session()
-        user_count = db_session.query(User).count()
-        db_session.close()
-        
         return dict(
-            lang=lang, 
-            t=t_formatted, 
+            lang=lang,
+            t=_translations_resolved.get(lang, _translations_resolved['tr']),
             all_langs=['tr', 'en'],
-            total_users=user_count,
+            total_users=_get_user_count(),
             app_version=app.config['APP_VERSION']
         )
     
@@ -120,15 +136,10 @@ def create_app():
     # Logger
     from logger import setup_logger
     setup_logger(app)
-    def shutdown_session(exception=None):
-        from database import get_session
-        s = get_session()
-        if hasattr(s, 'remove'):
-            s.remove()
-        else:
-            # If it's a raw session (not scoped), we should close it
-            # But get_session now returns a scoped session instance
-            pass
+
+    @app.teardown_appcontext
+    def _cleanup_session(exception=None):
+        remove_session()
 
     return app
 
