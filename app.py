@@ -29,8 +29,9 @@ def create_app():
     # Global upload tavanı (10 MB) — admin Excel import'u için yeterli, DoS yüzeyi azaltır
     app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
     
-    # Apply ProxyFix to handle X-Forwarded-Proto from Nginx/Cloudflare
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    # Apply ProxyFix to handle X-Forwarded-Proto/For/Host from Nginx/Cloudflare
+    # x_prefix omitted — SCRIPT_NAME is forced below from APP_PREFIX env var
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Prefix configuration for internal logic (branding/cookies)
     APP_PREFIX = os.getenv('APP_PREFIX', '/solutions/radar')
