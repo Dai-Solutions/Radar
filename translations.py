@@ -214,9 +214,11 @@ translations = {
             'title': 'SENARYO ANALİZİ'
         },
         'scenarios': {
-            'optimistic_name': 'İyimser Senaryo (%90)',
+            'optimistic_name': 'İyimser Senaryo (P90)',
             'optimistic_desc': 'Piyasa koşullarının iyileştiği ve ödemelerin stabil kaldığı durum.',
-            'critical_name': 'Kritik Senaryo (%10)',
+            'base_name': 'Baz Senaryo (P50)',
+            'base_desc': 'Mevcut koşulların devam ettiği medyan durum.',
+            'critical_name': 'Kötümser Senaryo (P10)',
             'critical_desc': 'Faizlerin yükseldiği ve ödeme hızının yavaşladığı stres testi.'
         },
         'chart_score_dist': 'Skor Dağılımı (Simülasyon)',
@@ -372,9 +374,11 @@ translations = {
             'rejected_risk_limits': 'Credit request DENIED. Current ratios and market conditions exceed risk limits.'
         },
         'scenarios': {
-            'optimistic_name': 'Optimistic Scenario (90%)',
+            'optimistic_name': 'Optimistic Scenario (P90)',
             'optimistic_desc': 'Market conditions improve and payments remain stable.',
-            'critical_name': 'Critical Scenario (10%)',
+            'base_name': 'Base Scenario (P50)',
+            'base_desc': 'Median outcome under current conditions.',
+            'critical_name': 'Pessimistic Scenario (P10)',
             'critical_desc': 'Stress test where interest rates rise and payment speed slows.'
         },
         'chart_score_dist': 'Score Distribution (Simulation)',

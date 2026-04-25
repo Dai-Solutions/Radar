@@ -56,6 +56,10 @@ class CreditScoreResult:
     inflation_capped: bool = False
     dscr_score: float = 0
     volatility: float = 0
+    piotroski_score: int = 0
+    piotroski_grade: str = ""
+    icr_score: float = 0.0
+    aging_concentration: float = 0.0
 
 class CreditScorer:
     """Credit scoring engine"""
@@ -95,13 +99,17 @@ class CreditScorer:
     Z_SAFE_ZONE = 2.9
     Z_GREY_ZONE = 1.23
     
-    # Constants for different sectors (A, B, C, D, E weights)
+    # Altman Z-Score katsayıları sektöre göre (A=çalışma_sermayesi, B=birikmiş_kar,
+    # C=EBIT, D=özkaynak/borç, E=satışlar — hepsi toplam varlıklara bölünür)
     SECTOR_Z_CONSTANTS = {
-        'manufacturing': (0.717, 0.847, 3.107, 0.420, 0.998),
-        'retail':        (6.56, 3.26, 6.72, 1.05, 0.01),
-        'service':       (1.2, 1.4, 3.3, 0.6, 0.99),
-        'general':       (1.2, 1.4, 3.3, 0.6, 1.0) # Generic EM model
+        'manufacturing':  (0.717, 0.847, 3.107, 0.420, 0.998),  # Altman 1968 orijinal
+        'retail':         (6.56,  3.26,  6.72,  1.05,  0.999),  # Altman 1995 private firm
+        'service':        (1.2,   1.4,   3.3,   0.6,   0.999),  # EM modeli — hizmet ağırlıklı
+        'construction':   (0.9,   1.1,   2.8,   0.5,   0.8  ),  # İnşaat — düşük varlık devri
+        'general':        (1.2,   1.4,   3.3,   0.6,   1.0  ),  # Genel / bilinmeyen
     }
+
+    VALID_SECTORS = list(SECTOR_Z_CONSTANTS.keys())
 
     def _safe_get(self, obj, attr, default=0):
         if obj is None: return default
@@ -126,11 +134,12 @@ class CreditScorer:
         net_profit = float(getattr(self.customer, 'annual_net_profit', 0) or 0)
         liquidity = float(getattr(self.customer, 'liquidity_ratio', 1.0) or 1.0)
         
-        # 0. Z-Score (Sector Specific)
+        # 0. Z-Score — sektör customer.sector'dan gelir, eski sector_risk proxy'si kaldırıldı
         z_score = 0.0
         z_score_note = "N/A"
-        sector_key = 'manufacturing' if sector_risk >= 1.2 else ('service' if sector_risk <= 0.8 else 'general')
-        weights = self.SECTOR_Z_CONSTANTS.get(sector_key, self.SECTOR_Z_CONSTANTS['general'])
+        customer_sector = str(getattr(self.customer, 'sector', 'general') or 'general').lower()
+        sector_key = customer_sector if customer_sector in self.VALID_SECTORS else 'general'
+        weights = self.SECTOR_Z_CONSTANTS[sector_key]
         
         if total_assets > 0:
             A = (working_capital or 0) / total_assets
@@ -197,10 +206,35 @@ class CreditScorer:
         final_score = max(0, min(100, final_score))
         note = self._calculate_note(final_score)
         
-        # 4. Results Support
+        # 4. Ek Analizler
+
+        # 4a. Interest Coverage Ratio (ICR) — sadece faiz yükü, DSCR'dan bağımsız
+        icr = (ebit / interest_expenses) if interest_expenses > 0 else 0.0
+        icr = round(max(0.0, icr), 2)
+
+        # 4b. Piotroski F-Score (0-9)
+        piotroski, pio_grade = self._calculate_piotroski(
+            net_profit, total_assets, total_liabilities, equity,
+            ebit, sales, current_assets=float(getattr(self.customer, 'current_assets', 0) or 0),
+            short_term_liabilities=float(getattr(self.customer, 'short_term_liabilities', 0) or 0)
+        )
+
+        # 4c. Aging Concentration Index (90+ gün yüzdesi)
+        hist = analysis.historical_total_debt if hasattr(analysis, 'historical_total_debt') else 0
+        aging_conc = 0.0
+        if hist > 0:
+            bad_debt = (analysis.historical_days_90_plus if hasattr(analysis, 'historical_days_90_plus') else 0)
+            aging_conc = round((bad_debt / hist) * 100, 1)
+
+        # Piotroski final_score'a küçük katkı: her puan ~0.5, yani max ±4.5 etki
+        pio_impact = (piotroski - 4.5) * 0.5  # 0 = -2.25, 9 = +2.25
+        final_score = max(0, min(100, final_score + pio_impact))
+
+        # 5. Sonuçlar
         rec_limit, rec_msg = self._calculate_limit_recommendation(final_score, note, request_amount, lang)
         max_cap = self._calculate_max_capacity(equity, liquidity, avg_debt, note, interest_rate, sector_risk)
-        vade_days, vade_key, inf_capped = self._calculate_vade_recommendation(final_score, momentum, (request_amount / max(1, avg_debt)), inflation_rate, volatility=volatility)
+        vade_days, vade_key, inf_capped = self._calculate_vade_recommendation(
+            final_score, momentum, (request_amount / max(1, avg_debt)), inflation_rate, volatility=volatility)
         vade_msg = translations[lang]['decision_details'].get(f'vade_{vade_key}', "Peşin sevkiyat")
 
         result = CreditScoreResult(
@@ -216,15 +250,17 @@ class CreditScorer:
             trend_direction=self._safe_get(analysis, 'trend_direction'), profitability_impact=profit_impact,
             z_score=round(z_score, 2), z_score_note=z_score_note,
             vade_days=vade_days, vade_message=vade_msg, inflation_capped=inf_capped,
-            dscr_score=round(dscr, 2), volatility=round(volatility, 1)
+            dscr_score=round(dscr, 2), volatility=round(volatility, 1),
+            piotroski_score=piotroski, piotroski_grade=pio_grade,
+            icr_score=icr, aging_concentration=aging_conc,
         )
-        
+
         result.decision_summary = self._create_decision_summary(result, lang)
-        
+
         if not skip_scenarios:
             result.assessment = self._create_assessment(result, liquidity, net_profit, z_score, inflation_rate, lang)
             result.scenarios = self._probability_analysis(settings, request_input, lang)
-            
+
         return result
 
     def _calculate_vade_recommendation(self, score, momentum, request_ratio, inflation, volatility=0):
@@ -293,46 +329,60 @@ class CreditScorer:
     def _probability_analysis(self, settings, request_input, lang):
         scenarios = []
         import copy
-        
-        # Monte Carlo Simulation (1000 iterations)
-        iterations = 1000
+
+        # Monte Carlo Simulation
+        # iter sayısı settings'ten okunur (varsayılan 500). Reproducibility için
+        # customer_id'ye seed atılır — aynı müşteri için her seferinde aynı dağılım.
+        iterations = int(self._safe_get(settings, 'monte_carlo_iterations', 500) or 500)
+        iterations = max(50, min(5000, iterations))  # güvenli aralık
+        rng = random.Random(self.customer_id if self.customer_id is not None else 0)
         scores = []
-        
+
         base_interest = float(self._safe_get(settings, 'interest_rate', 45.0))
         base_request = float(self._safe_get(request_input, 'request_amount', 0))
-        
+
         for _ in range(iterations):
-            # Varying inputs: Interest (+/- 10%), Request (+/- 20%)
+            # Faiz: [0.9, 1.2] aralığı kasıtlı asimetrik — faiz artışı düşüşten daha olası (upside risk).
+            # Talep ±%20 simetrik.
             sim_settings = copy.copy(settings)
-            sim_settings['interest_rate'] = base_interest * random.uniform(0.9, 1.2) # Skewed to upside risk
-            
+            sim_settings['interest_rate'] = base_interest * rng.uniform(0.9, 1.2)
+
             sim_request = copy.copy(request_input)
-            sim_request['request_amount'] = base_request * random.uniform(0.8, 1.2)
-            
+            sim_request.request_amount = base_request * rng.uniform(0.8, 1.2)
+
             # Run calculation (skipping nested scenarios to avoid recursion)
             res = self.calculate(sim_settings, sim_request, skip_scenarios=True, lang=lang)
             scores.append(res.final_score)
             
         scores.sort()
-        
-        # Scenario 1: Optimistic (90th percentile)
+        median = scores[int(iterations * 0.5)]
+
+        # P90 — İyimser senaryo
         opt_score = scores[int(iterations * 0.9) - 1]
         scenarios.append(ScenarioResult(
             translations[lang]['scenarios']['optimistic_name'],
             translations[lang]['scenarios']['optimistic_desc'],
-            round(opt_score - scores[int(iterations * 0.5)], 1),
+            round(opt_score - median, 1),
             round(opt_score, 1)
         ))
-        
-        # Scenario 2: Critical / Stress Test (10th percentile)
+
+        # P50 — Baz senaryo (medyan)
+        scenarios.append(ScenarioResult(
+            translations[lang]['scenarios'].get('base_name', 'Baz Senaryo'),
+            translations[lang]['scenarios'].get('base_desc', 'Mevcut koşulların devam ettiği orta durum.'),
+            0.0,
+            round(median, 1)
+        ))
+
+        # P10 — Kötümser / Stres testi
         crit_score = scores[int(iterations * 0.1) - 1]
         scenarios.append(ScenarioResult(
             translations[lang]['scenarios']['critical_name'],
             translations[lang]['scenarios']['critical_desc'],
-            round(crit_score - scores[int(iterations * 0.5)], 1),
+            round(crit_score - median, 1),
             round(crit_score, 1)
         ))
-        
+
         return scenarios
 
     def _calculate_debt_score(self, avg_debt):
@@ -349,6 +399,62 @@ class CreditScorer:
         for n, (mi, ma) in self.NOTE_RANGES.items():
             if mi <= score <= ma: return n
         return 'C'
+
+    def _calculate_piotroski(self, net_profit, total_assets, total_liabilities, equity,
+                              ebit, sales, current_assets=0, short_term_liabilities=0):
+        """
+        Piotroski F-Score: 9 binary kriter, 0-9 puan.
+        Karlılık (F1-F4) + Kaldıraç/Likidite (F5-F7) + Verimlilik (F8-F9).
+        Not: tek dönem verisi olduğundan geçmiş yıl kıyaslaması yapılamaz;
+        o kriterler varlık bazlı eşik değerlerle yaklaştırılır.
+        """
+        score = 0
+
+        # --- Karlılık Grubu (F1-F4) ---
+        # F1: Pozitif net kar
+        if net_profit > 0:
+            score += 1
+        # F2: Pozitif ROA (net_kar / toplam_varlık)
+        roa = (net_profit / total_assets) if total_assets > 0 else 0
+        if roa > 0:
+            score += 1
+        # F3: Pozitif işletme nakit akışı — EBIT proxy olarak kullanılır
+        if ebit > 0:
+            score += 1
+        # F4: Nakit akışı / net kar > 1 (kaliteli kazanç) — EBIT/net_kar eşiği
+        if net_profit > 0 and total_assets > 0 and (ebit / total_assets) > roa:
+            score += 1
+
+        # --- Kaldıraç / Likidite Grubu (F5-F7) ---
+        # F5: Borç oranı düşük — toplam_borç / toplam_varlık < 0.6
+        debt_ratio = (total_liabilities / total_assets) if total_assets > 0 else 1.0
+        if debt_ratio < 0.6:
+            score += 1
+        # F6: Current ratio > 1.2
+        cr = (current_assets / short_term_liabilities) if short_term_liabilities > 0 else 2.0
+        if cr > 1.2:
+            score += 1
+        # F7: Özkaynak pozitif ve borç / özkaynak < 2
+        if equity > 0 and (total_liabilities / equity) < 2.0:
+            score += 1
+
+        # --- Verimlilik Grubu (F8-F9) ---
+        # F8: Varlık devir hızı > 0.5 (satışlar / toplam_varlık)
+        asset_turnover = (sales / total_assets) if total_assets > 0 else 0
+        if asset_turnover > 0.5:
+            score += 1
+        # F9: Brüt marj proxy — EBIT / satışlar > 0.05
+        if sales > 0 and (ebit / sales) > 0.05:
+            score += 1
+
+        if score >= 7:
+            grade = "Güçlü"
+        elif score >= 4:
+            grade = "Orta"
+        else:
+            grade = "Zayıf"
+
+        return score, grade
 
     def _calculate_limit_recommendation(self, score, note, amount, lang):
         if note == 'A': return amount, "Tam Onay"
