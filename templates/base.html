@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar 1.0 - {% block title %}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    {% block extra_head %}{% endblock %}
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --secondary: #64748b;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --white: #ffffff;
+            --border: #e2e8f0;
+        }
+        body {
+            background: #f1f5f9;
+            color: var(--dark);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .main-container { padding-top: 2rem; padding-bottom: 5rem; }
+        .glass-card {
+            background: var(--white);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            transition: all 0.3s ease;
+        }
+        .glass-card:hover {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.07);
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        /* ── NAVBAR ─────────────────────────────────────── */
+        .navbar {
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 0;
+            min-height: 64px;
+        }
+        .navbar .container {
+            flex-wrap: nowrap;
+        }
+        .nav-link {
+            color: var(--secondary) !important;
+            font-weight: 600;
+            white-space: nowrap;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+        .nav-link:hover, .nav-link.active { color: var(--primary) !important; }
+
+        .navbar-brand .logo-container { transition: 0.3s; }
+        .navbar-brand:hover .logo-container { transform: scale(1.05); }
+
+        .user-counter {
+            font-size: 0.75rem;
+            color: #10b981;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+        }
+
+        .menu-capsule {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+
+        /* Language pill */
+        .lang-switch-pill {
+            background: #f1f5f9;
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 4px 12px;
+        }
+        .lang-link {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .lang-link.active { color: var(--dark); }
+
+        .text-glow-info  { color: var(--primary) !important; }
+        .text-glow-danger { color: #ef4444 !important; }
+
+        .btn-primary {
+            background: var(--primary);
+            border: none;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            transition: 0.3s;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4); }
+
+        /* Premium Toast */
+        #radarToast {
+            position: fixed; bottom: 30px; right: 30px; z-index: 10002;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px);
+            border: 1px solid var(--border); border-radius: 16px; padding: 16px 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex; align-items: center; gap: 15px;
+            transform: translateY(120%);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #radarToast.show { transform: translateY(0); }
+        .toast-icon {
+            width: 40px; height: 40px; background: #10b981; color: white;
+            border-radius: 12px; display: flex; align-items: center;
+            justify-content: center; font-size: 1.25rem;
+        }
+
+        {% block extra_style %}{% endblock %}
+    </style>
+</head>
+<body>
+
+    <!-- Feedback Modal -->
+    <div id="feedbackModal" style="display:none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
+        <div class="glass-card" style="margin: 10% auto; padding: 2.5rem; width: 90%; max-width: 450px;">
+            <h3 class="fw-bold mb-2">{{ t['feedback'] }}</h3>
+            <p class="text-muted small mb-4">{{ t['feedback_desc'] }}</p>
+            <textarea id="feedbackText" class="form-control mb-4 bg-light border-0" style="height: 120px; border-radius: 12px;" placeholder="{{ t['msg_placeholder'] }}"></textarea>
+            <div class="d-flex gap-2 justify-content-end">
+                <button onclick="closeFeedbackModal()" class="btn btn-outline-secondary border-0">{{ t['cancel'] }}</button>
+                <button id="submitFeedbackBtn" onclick="submitFeedback()" class="btn btn-primary px-4 fw-bold rounded-pill">{{ t['send'] }}</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Toast -->
+    <div id="radarToast">
+        <div class="toast-icon"><i class="bi bi-check-lg"></i></div>
+        <div>
+            <h6 class="fw-bold mb-0 text-dark" id="toastTitle">Teşekkür Ederiz!</h6>
+            <p class="small text-muted mb-0" id="toastMsg">Geri bildiriminiz başarıyla iletildi.</p>
+        </div>
+    </div>
+
+    <!-- ── NAVBAR ─────────────────────────────────────────── -->
+    <nav class="navbar navbar-expand-lg sticky-top shadow-sm">
+        <div class="container">
+            <a class="navbar-brand d-flex flex-column" href="{{ url_for('main.index') }}">
+                <div class="d-flex align-items-center">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="38" class="me-2">
+                    <span class="fw-bold h5 mb-0 text-dark">Radar <small class="text-secondary fw-normal">1.0</small></span>
+                </div>
+                <span class="text-secondary fw-bold text-uppercase" style="font-size: 0.6rem; margin-top: -2px; letter-spacing: 0.5px;">{{ t['system_tagline'] }}</span>
+            </a>
+
+            <button class="navbar-toggler border-0 ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#radarNav" aria-controls="radarNav" aria-expanded="false">
+                <i class="bi bi-list text-dark fs-2"></i>
+            </button>
+
+            <div class="collapse navbar-collapse" id="radarNav">
+                <div class="navbar-nav ms-auto align-items-center gap-3 pt-2 pt-lg-0">
+
+                    <!-- User count -->
+                    {% if total_users is defined %}
+                    <div class="user-counter d-none d-lg-flex align-items-center bg-light px-2 py-1 rounded-pill border border-secondary border-opacity-10" style="white-space: nowrap;">
+                        <i class="bi bi-person-fill me-1"></i>
+                        <span class="fw-bold">{{ total_users }}</span>
+                    </div>
+                    {% endif %}
+
+                    <!-- Language switch -->
+                    <div class="lang-switch-pill d-flex align-items-center">
+                        <a href="{{ url_for('main.set_language', lang='tr') }}" class="lang-link px-2 {{ 'active' if lang == 'tr' else '' }}">TR</a>
+                        <span class="text-muted opacity-50 small">|</span>
+                        <a href="{{ url_for('main.set_language', lang='en') }}" class="lang-link px-2 {{ 'active' if lang == 'en' else '' }}">EN</a>
+                    </div>
+
+                    <!-- Feedback -->
+                    <a class="nav-link" href="#" onclick="openFeedbackModal(); return false;">
+                        <i class="bi bi-chat-dots me-1"></i>{{ t['feedback'] | upper }}
+                    </a>
+
+                    <!-- Main menu capsule -->
+                    <div class="menu-capsule gap-1">
+                        <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'new_customer' else '' }}"
+                           href="{{ url_for('customer.new_customer') }}">{{ t['new_customer'] | upper }}</a>
+                        <span class="text-muted opacity-25">|</span>
+                        <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'import_excel' else '' }}"
+                           href="{{ url_for('admin.import_excel') }}">{{ t['import_excel'] | upper }}</a>
+                        <span class="text-muted opacity-25">|</span>
+                        <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'dashboard' else '' }}"
+                           href="{{ url_for('main.index') }}">{{ t['dashboard'] | upper }}</a>
+                    </div>
+
+                    <!-- Security + Sponsor -->
+                    <div class="d-flex align-items-center">
+                        <a class="nav-link text-glow-info d-flex align-items-center" href="{{ url_for('main.guvenlik') }}">
+                            <i class="bi bi-shield-fill-check fs-5 me-1"></i>
+                            <span class="fw-bold" style="font-size: 0.75rem;">{{ t['security'] | upper }}</span>
+                        </a>
+                        <a class="nav-link text-glow-danger ms-1" href="https://opencollective.com/dynamicai#category-CONNECT" target="_blank" title="Sponsor">
+                            <i class="bi bi-heart-fill fs-5"></i>
+                        </a>
+                    </div>
+
+                    <div class="vr bg-secondary opacity-25 d-none d-lg-block mx-1" style="height: 20px;"></div>
+
+                    <!-- User email + logout -->
+                    <span class="navbar-text small fw-bold text-primary px-1 d-none d-xl-inline">{{ current_user.email }}</span>
+                    <a class="nav-link text-danger fw-bold" href="{{ url_for('auth.logout') }}">
+                        <i class="bi bi-box-arrow-right fs-5"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- ── END NAVBAR ─────────────────────────────────────── -->
+
+    {% block content %}{% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const langT = {{ t | tojson }};
+
+        function openFeedbackModal()  { document.getElementById('feedbackModal').style.display = 'block'; }
+        function closeFeedbackModal() { document.getElementById('feedbackModal').style.display = 'none';  }
+
+        function showToast(title, msg) {
+            const toast = document.getElementById('radarToast');
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastMsg').innerText   = msg;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 4000);
+        }
+
+        function submitFeedback() {
+            const message = document.getElementById('feedbackText').value;
+            const btn = document.getElementById('submitFeedbackBtn');
+            if (!message) { alert(langT['msg_empty_alert']); return; }
+            btn.disabled = true; btn.innerText = langT['msg_sending'];
+            fetch('{{ url_for('admin.submit_feedback') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast("Harika!", "Fikirleriniz bizim için çok değerli, teşekkür ederiz.");
+                    closeFeedbackModal();
+                    document.getElementById('feedbackText').value = '';
+                } else { alert(langT['msg_error_prefix'] + data.message); }
+            })
+            .catch(err => { console.error(err); alert(langT['msg_generic_error']); })
+            .finally(() => { btn.disabled = false; btn.innerText = langT['send']; });
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

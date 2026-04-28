@@ -190,15 +190,15 @@ def verify_email(token):
 
 @auth_bp.route('/login/google')
 def login_google():
-    domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
-    prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
-    # Build absolute redirect URI manually to bypass proxy header confusion
-    redirect_uri = f"https://{domain}{prefix}/login/google/callback"
+    # Google Console'da tanımlı olan adrese sadık kalıyoruz (technodai.com/radar)
+    redirect_uri = "https://technodai.com/radar/login/google/callback"
     return oauth.google.authorize_redirect(redirect_uri, prompt='select_account')
 
 @auth_bp.route('/login/google/callback')
 def authorize():
-    token = oauth.google.authorize_access_token()
+    # Aynı adresi buraya da veriyoruz
+    redirect_uri = "https://technodai.com/radar/login/google/callback"
+    token = oauth.google.authorize_access_token(redirect_uri=redirect_uri)
     userinfo = token.get('userinfo')
     if userinfo:
         email = userinfo['email'].strip().lower()
@@ -215,13 +215,13 @@ def authorize():
 
                 try:
                     verify_token = ts.dumps(email, salt='email-confirm-key')
-                    domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
-                    prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
+                    domain = current_app.config.get('DOMAIN_NAME', 'technodai.com')
+                    prefix = current_app.config.get('APP_PREFIX', '/radar')
                     verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
                     send_welcome_email(email, name, verify_url)
-                    flash(f"{current_app.config['APP_VERSION']} dünyasına Hoş Geldiniz! Lütfen mailinize gönderdiğimiz onay mailini kontrol ediniz.", 'info')
+                    flash(f"Radar dünyasına Hoş Geldiniz! Lütfen e-postanıza ({email}) gönderdiğimiz onay linkine tıklayınız.", 'info')
                 except Exception as e:
-                    current_app.logger.error(f"Branded mail failed: {e}")
+                    current_app.logger.error(f"Mail failed: {e}")
 
                 return redirect(url_for('auth.login'))
 

@@ -155,6 +155,11 @@ def create_app():
 
 app = create_app()
 
+# Google Auth Compatibility Route (Console matches /solutions/radar)
+@app.route('/solutions/radar/login/google/callback')
+def google_callback_compatibility():
+    return redirect(url_for('auth.authorize', **request.args))
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=8001)
+    app.run(host="0.0.0.0", port=8005)

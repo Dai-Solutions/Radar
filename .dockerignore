@@ -1,0 +1,15 @@
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.github
+.vscode
+.claude
+data/*.log
+data/*.db
+data/radar_structured.log
+scratch
+venv/
+.env
