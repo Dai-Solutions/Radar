@@ -246,9 +246,29 @@ def get_engine():
     return _engine
 
 def init_db():
+    """Bootstrap schema + run lightweight migrations.
+
+    Concurrency-safe under multiple gunicorn workers: uses a Postgres advisory
+    lock (no-op on SQLite) so only one process runs CREATE/ALTER at a time;
+    the rest wait, then see tables already exist and return.
+    """
     engine = get_engine()
-    Base.metadata.create_all(engine)
-    _run_lightweight_migrations(engine)
+    is_postgres = engine.url.get_backend_name() == 'postgresql'
+
+    if is_postgres:
+        with engine.connect() as conn:
+            # Arbitrary 64-bit key for Radar schema bootstrap
+            conn.execute(text('SELECT pg_advisory_lock(7382001)'))
+            try:
+                Base.metadata.create_all(conn)
+                conn.commit()
+                _run_lightweight_migrations(engine)
+            finally:
+                conn.execute(text('SELECT pg_advisory_unlock(7382001)'))
+                conn.commit()
+    else:
+        Base.metadata.create_all(engine)
+        _run_lightweight_migrations(engine)
     return engine
 
 
