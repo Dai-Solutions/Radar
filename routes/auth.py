@@ -196,9 +196,9 @@ def login_google():
 
 @auth_bp.route('/login/google/callback')
 def authorize():
-    # Aynı adresi buraya da veriyoruz
-    redirect_uri = "https://technodai.com/radar/login/google/callback"
-    token = oauth.google.authorize_access_token(redirect_uri=redirect_uri)
+    # authlib >=1.3 redirect_uri'yi state'ten otomatik okur; açıkça geçmek
+    # "multiple values for keyword argument 'redirect_uri'" hatasına yol açar.
+    token = oauth.google.authorize_access_token()
     userinfo = token.get('userinfo')
     if userinfo:
         email = userinfo['email'].strip().lower()
