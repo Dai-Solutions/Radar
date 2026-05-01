@@ -141,13 +141,6 @@ def create_app():
             app_version=app.config['APP_VERSION']
         )
     
-    # Language switcher route
-    @app.route('/set-language/<lang>')
-    def set_language(lang):
-        if lang in ['tr', 'en', 'es', 'de']:
-            session['lang'] = lang
-        return redirect(request.referrer or '/')
-    
     # Error Handlers
     @app.errorhandler(404)
     def error_404(e):

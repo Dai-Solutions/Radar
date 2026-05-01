@@ -42,7 +42,7 @@ def index():
 
 @main_bp.route('/set_language/<lang>')
 def set_language(lang):
-    if lang in ['tr', 'en']:
+    if lang in ('tr', 'en', 'es', 'de'):
         session['lang'] = lang
     return redirect(request.referrer or url_for('main.index'))
 
