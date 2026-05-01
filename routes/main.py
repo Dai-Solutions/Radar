@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, redirect, url_for, session, reques
 from flask_login import login_required, current_user
 from database import get_session, Customer, CreditScore, CreditRequest, AgingRecord as AgingRecordDB
 from translations import translations
-from extensions import ts
 
 main_bp = Blueprint('main', __name__)
 
