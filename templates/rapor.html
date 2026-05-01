@@ -186,7 +186,7 @@
                 <div class="glass-card p-4 text-center h-100 border-0 shadow-sm">
                     <small class="text-secondary text-uppercase fw-bold d-block mb-3 small">Faiz Karşılama (ICR)</small>
                     <h4 class="fw-bold mb-2 {{ 'text-success' if (sonuc.icr_score or 0) >= 3.0 else ('text-warning' if (sonuc.icr_score or 0) >= 1.5 else 'text-danger') }}">
-                        {% if (sonuc.icr_score or 0) == 0 %}N/A{% else %}{{ (sonuc.icr_score)|round(2) }}x{% endif %}
+                        {% if (sonuc.icr_score or 0) == 0 %}—{% else %}{{ (sonuc.icr_score)|round(2) }}x{% endif %}
                     </h4>
                     <span class="badge {{ 'bg-success' if (sonuc.icr_score or 0) >= 3.0 else ('bg-warning text-dark' if (sonuc.icr_score or 0) >= 1.5 else 'bg-danger') }} rounded-pill px-3 py-2 small fw-bold">
                         {{ 'Sağlıklı' if (sonuc.icr_score or 0) >= 3.0 else ('Yeterli' if (sonuc.icr_score or 0) >= 1.5 else ('Kritik' if (sonuc.icr_score or 0) > 0 else 'Veri Yok')) }}
@@ -212,7 +212,15 @@
             <h5 class="fw-bold text-dark mb-3 d-flex align-items-center">
                 <i class="bi bi-chat-left-text-fill me-3 text-primary"></i>{{ t['executive_assessment'] }}
             </h5>
-            <p class="text-dark mb-0 opacity-75">{{ sonuc.assessment }}</p>
+            <p class="text-dark mb-0 opacity-75">
+                {% if sonuc.assessment and sonuc.assessment.strip() %}
+                    {{ sonuc.assessment }}
+                {% elif sonuc.decision_summary and sonuc.decision_summary.strip() %}
+                    {{ sonuc.decision_summary }}
+                {% else %}
+                    <span class="text-muted fst-italic">—</span>
+                {% endif %}
+            </p>
         </div>
 
         <div class="glass-card overflow-hidden border-0 shadow-sm mb-5">
