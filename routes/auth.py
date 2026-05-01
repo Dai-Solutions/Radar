@@ -6,7 +6,10 @@ from markupsafe import escape
 import datetime
 import time
 
-from extensions import login_manager, oauth, mail, ts
+from extensions import login_manager, oauth, mail
+# NOTE: `ts` (URLSafeTimedSerializer) is NOT imported here — it's None at module
+# import time and only gets set inside init_extensions(). All callsites use
+# `from extensions import ts as _ts` locally to capture the live value.
 from database import get_session, User, Feedback
 from translations import translations
 
@@ -154,7 +157,11 @@ def register():
             session_db.close()
 
         try:
-            verify_token = ts.dumps(email, salt='email-confirm-key')
+            # extensions.ts module-level binding gets set in init_extensions(),
+            # but `from extensions import ts` at top captured the original None.
+            # Re-import inside function to get the live serializer.
+            from extensions import ts as _ts
+            verify_token = _ts.dumps(email, salt='email-confirm-key')
             domain = current_app.config.get('DOMAIN_NAME', 'daisoftwares.com')
             prefix = current_app.config.get('APP_PREFIX', '/solutions/radar')
             verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
@@ -214,7 +221,8 @@ def authorize():
                 session_db.refresh(user)
 
                 try:
-                    verify_token = ts.dumps(email, salt='email-confirm-key')
+                    from extensions import ts as _ts
+                    verify_token = _ts.dumps(email, salt='email-confirm-key')
                     domain = current_app.config.get('DOMAIN_NAME', 'technodai.com')
                     prefix = current_app.config.get('APP_PREFIX', '/radar')
                     verify_url = f"https://{domain}{prefix}/verify_email/{verify_token}"
