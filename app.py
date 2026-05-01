@@ -1,12 +1,17 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from flask import Flask, render_template, session
+from flask import Flask, render_template, session, redirect, url_for, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 
 # Shared extensions
 from extensions import init_extensions, login_manager
+
+# i18n & Enterprise
+from i18n_utils import init_babel
+from enterprise import init_enterprise_features
+from api_docs import init_swagger, api_bp
 
 # Blueprints
 from routes.auth import auth_bp
@@ -63,7 +68,7 @@ def create_app():
     # Branding & Domain
     app.config['DOMAIN_NAME'] = os.getenv('DOMAIN_NAME', 'daisoftwares.com')
     app.config['ADMIN_EMAIL'] = os.getenv('ADMIN_EMAIL', 'info@daisoftwares.com')
-    app.config['APP_VERSION'] = os.getenv('APP_VERSION', 'Radar 1.0')
+    app.config['APP_VERSION'] = os.getenv('APP_VERSION', 'Radar 2.0')
     app.config['APP_PREFIX'] = APP_PREFIX
     
     # OAuth Config
@@ -74,6 +79,12 @@ def create_app():
     
     # Initialize extensions
     init_extensions(app)
+    
+    # Initialize i18n (Babel for multi-language support)
+    init_babel(app)
+    
+    # Initialize Swagger/OpenAPI documentation
+    init_swagger(app)
     
     # Register Google OAuth (needs to be done with secret info)
     from extensions import oauth
@@ -91,6 +102,7 @@ def create_app():
     app.register_blueprint(customer_bp)
     app.register_blueprint(scoring_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(api_bp)  # API documentation & endpoints
     
     # Çeviri sözlüklerini app start'ta bir kez prefix ile materialize et
     import json as _json
@@ -124,10 +136,17 @@ def create_app():
         return dict(
             lang=lang,
             t=_translations_resolved.get(lang, _translations_resolved['tr']),
-            all_langs=['tr', 'en'],
+            all_langs=['tr', 'en', 'es', 'de'],  # Added German (de)
             total_users=_get_user_count(),
             app_version=app.config['APP_VERSION']
         )
+    
+    # Language switcher route
+    @app.route('/set-language/<lang>')
+    def set_language(lang):
+        if lang in ['tr', 'en', 'es', 'de']:
+            session['lang'] = lang
+        return redirect(request.referrer or '/')
     
     # Error Handlers
     @app.errorhandler(404)
@@ -151,6 +170,13 @@ def create_app():
     def _cleanup_session(exception=None):
         remove_session()
 
+    # Schema bootstrap + lightweight migrations (must run before enterprise init,
+    # which inserts Role rows). Runs under gunicorn too, not just __main__.
+    init_db()
+
+    # Initialize enterprise features (default tenant backfill, RBAC roles)
+    init_enterprise_features(app)
+
     return app
 
 app = create_app()
@@ -161,5 +187,4 @@ def google_callback_compatibility():
     return redirect(url_for('auth.authorize', **request.args))
 
 if __name__ == '__main__':
-    init_db()
     app.run(host="0.0.0.0", port=8005)

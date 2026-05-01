@@ -1,29 +1,95 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean, Date, DateTime, Text, func
+import logging
+from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean, Date, DateTime, Text, func, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 load_dotenv()
 
 Base = declarative_base()
 
+class Tenant(Base):
+    """Multi-tenant support — her firma kendi tenant'ı"""
+    __tablename__ = 'tenants'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    slug = Column(String, unique=True, nullable=False)  # URL-friendly identifier
+    description = Column(String)
+    logo_url = Column(String)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    users = relationship("User", back_populates="tenant")
+    customers = relationship("Customer", back_populates="tenant")
+    audit_logs = relationship("AuditLog", back_populates="tenant", cascade="all, delete-orphan")
+
+class Role(Base):
+    """RBAC Roller"""
+    __tablename__ = 'roles'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # admin, credit_manager, analyst, approver
+    description = Column(String)
+    permissions = Column(String)  # JSON-encoded permissions
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user_roles = relationship("UserRole", back_populates="role", cascade="all, delete-orphan")
+
+class UserRole(Base):
+    """User ↔ Role mapping"""
+    __tablename__ = 'user_roles'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    role_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="roles")
+    role = relationship("Role", back_populates="user_roles")
+
+class AuditLog(Base):
+    """Compliance & Audit logging"""
+    __tablename__ = 'audit_logs'
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    action = Column(String, nullable=False)  # create, update, delete, view, export
+    entity_type = Column(String, nullable=False)  # Customer, CreditScore, User, etc.
+    entity_id = Column(Integer)
+    changes = Column(Text)  # JSON with before/after values
+    ip_address = Column(String)
+    user_agent = Column(String)
+    status = Column(String, default='success')  # success, failure
+    error_message = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    
+    tenant = relationship("Tenant", back_populates="audit_logs")
+    user = relationship("User")
+
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
+    # nullable=True for backfill compatibility; new rows default to tenant 1
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=True, default=1, index=True)
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=True)
     full_name = Column(String)
-    google_id = Column(String, unique=True)
+    google_id = Column(String)
+    language = Column(String(5), default='tr')
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    tenant = relationship("Tenant", back_populates="users")
+    roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
+
 class Customer(Base):
     __tablename__ = 'customers'
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=True, default=1, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     is_sample = Column(Boolean, default=False)
     account_code = Column(String, unique=True, nullable=False)
@@ -56,7 +122,8 @@ class Customer(Base):
     sector = Column(String(32), default='general')
 
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
+    tenant = relationship("Tenant", back_populates="customers")
     user = relationship("User")
     aging_records = relationship("AgingRecord", back_populates="customer", cascade="all, delete-orphan")
     credit_requests = relationship("CreditRequest", back_populates="customer", cascade="all, delete-orphan")
@@ -181,7 +248,71 @@ def get_engine():
 def init_db():
     engine = get_engine()
     Base.metadata.create_all(engine)
+    _run_lightweight_migrations(engine)
     return engine
+
+
+# Columns added by Phase 8/9 that may be missing on pre-2.0 databases.
+# create_all() only creates new tables, so we ALTER existing ones in-place.
+_PENDING_COLUMNS = {
+    'users': [
+        ('tenant_id', 'INTEGER'),
+        ('language', 'VARCHAR(5)'),
+    ],
+    'customers': [
+        ('tenant_id', 'INTEGER'),
+        # Faz 4 — Altman Z-Score & DSCR fields (may be missing on pre-Faz-4 DBs)
+        ('total_assets', 'FLOAT'),
+        ('total_liabilities', 'FLOAT'),
+        ('retained_earnings', 'FLOAT'),
+        ('ebit', 'FLOAT'),
+        ('sales', 'FLOAT'),
+        ('working_capital', 'FLOAT'),
+        ('interest_expenses', 'FLOAT'),
+        ('principal_payments', 'FLOAT'),
+        ('sector', 'VARCHAR(32)'),
+    ],
+}
+
+
+def _table_columns(conn, table):
+    """Fresh column list for a table (avoids stale inspector cache after ALTER)."""
+    return {c['name'] for c in inspect(conn).get_columns(table)}
+
+
+def _run_lightweight_migrations(engine):
+    """Add missing columns to existing tables and backfill default tenant.
+
+    Safe to run on every startup: each step re-reads the current schema.
+    """
+    with engine.begin() as conn:
+        existing_tables = set(inspect(conn).get_table_names())
+
+        for table, cols in _PENDING_COLUMNS.items():
+            if table not in existing_tables:
+                continue
+            current = _table_columns(conn, table)
+            for col_name, col_type in cols:
+                if col_name not in current:
+                    try:
+                        conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {col_name} {col_type}'))
+                        logger.info(f'Migration: added {table}.{col_name}')
+                    except Exception as e:
+                        logger.warning(f'Migration skip {table}.{col_name}: {e}')
+
+        # Ensure default tenant exists and backfill NULL tenant_id rows.
+        if 'tenants' in existing_tables:
+            row = conn.execute(text('SELECT id FROM tenants WHERE id = 1')).first()
+            if not row:
+                conn.execute(text(
+                    "INSERT INTO tenants (id, name, slug, is_active, created_at) "
+                    "VALUES (1, 'Default', 'default', :active, :ts)"
+                ), {'active': True, 'ts': datetime.utcnow()})
+                logger.info('Migration: created default tenant id=1')
+
+            for table in ('users', 'customers'):
+                if table in existing_tables and 'tenant_id' in _table_columns(conn, table):
+                    conn.execute(text(f'UPDATE {table} SET tenant_id = 1 WHERE tenant_id IS NULL'))
 
 def _ensure_session_registry():
     global _Session

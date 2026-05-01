@@ -1,5 +1,6 @@
 flask==3.0.0
 flask-login
+flask-babel>=4.0.0
 pandas==2.1.4
 openpyxl==3.1.2
 SQLAlchemy==2.0.23
@@ -11,3 +12,6 @@ requests
 psycopg2-binary
 flask-mail
 itsdangerous
+flasgger==0.9.7.1
+redis==5.0.0
+celery==5.3.4
