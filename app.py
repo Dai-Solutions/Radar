@@ -136,13 +136,17 @@ def create_app():
 
     @app.context_processor
     def inject_global_vars():
+        from flask_login import current_user
+        from routes.auth import is_admin_user
         lang = session.get('lang', 'tr')
+        is_admin = current_user.is_authenticated and is_admin_user(current_user)
         return dict(
             lang=lang,
             t=_translations_resolved.get(lang, _translations_resolved['tr']),
             all_langs=['tr', 'en', 'es', 'de'],  # Added German (de)
             total_users=_get_user_count(),
-            app_version=app.config['APP_VERSION']
+            app_version=app.config['APP_VERSION'],
+            is_admin=is_admin,
         )
     
     # Error Handlers

@@ -195,12 +195,11 @@
                     <div class="menu-capsule gap-1">
                         <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'new_customer' else '' }}"
                            href="{{ url_for('customer.new_customer') }}">{{ t['new_customer'] | upper }}</a>
+                        {% if is_admin %}
                         <span class="text-muted opacity-25">|</span>
                         <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'import_excel' else '' }}"
                            href="{{ url_for('admin.import_excel') }}">{{ t['import_excel'] | upper }}</a>
-                        <span class="text-muted opacity-25">|</span>
-                        <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'dashboard' else '' }}"
-                           href="{{ url_for('main.index') }}">{{ t['dashboard'] | upper }}</a>
+                        {% endif %}
                     </div>
 
                     <!-- Security + Sponsor -->
