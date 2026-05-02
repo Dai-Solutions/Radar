@@ -30,7 +30,7 @@ jobs:
         run: pytest tests/ -v -m security
 
       - name: Dependency vulnerability scan (pip-audit)
-        run: pip-audit --desc --strict || true   # bilgilendirme amaçlı, fail etme
+        run: pip-audit --desc --strict
 
       - name: Translation key parity (TR/EN/ES/DE)
         run: |

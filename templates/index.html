@@ -42,6 +42,7 @@
             <div class="col-12">
                 <div class="glass-card p-4">
                     <form action="{{ url_for('admin.update_settings') }}" method="POST" class="row g-3 align-items-center">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="col-md-3">
                             <label class="form-label mb-1 text-muted small fw-bold">{{ t['interest_rate'] | upper }} (%)</label>
                             <input type="number" name="interest_rate" class="form-control border-light-subtle bg-light" value="{{ settings.interest_rate }}" step="0.5">

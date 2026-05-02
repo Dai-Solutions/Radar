@@ -33,6 +33,7 @@
                     </div>
                     <h2 class="fw-bold text-dark mb-4">{{ t['import_excel'] }}</h2>
                     <form action="{{ url_for('admin.import_excel') }}" method="POST" enctype="multipart/form-data" class="mx-auto" style="max-width: 500px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-4 text-start">
                             <label class="form-label text-secondary small fw-bold text-uppercase mb-2 d-block">{{ t['select_excel'] }}</label>
                             <input type="file" name="excel_file" class="form-control" required>

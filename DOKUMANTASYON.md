@@ -219,33 +219,59 @@ curl -I https://technodai.com/radar/
 
 ---
 
-## 10. Teknik Borç
+## 10. Sürekli İyileştirme — Tamamlanan Sertleştirmeler
 
-| Konu | Etki | Çözüm |
+| Konu | Yapılan İyileştirme | Durum |
 |---|---|---|
-| Alembic yok | Şema değişimi riskli | Lightweight ALTER yeterli kalıyor; karmaşıklaşırsa Alembic'e geç |
-| Test coverage < %5 | Refactor riskli | Pytest iskeleti kur, kritik path'lere odaklan |
+| docker-compose `version` field obsolete | Field kaldırıldı | ✅ |
+| Webhook retry yok | `_post_with_retry` — 3 deneme + exponential backoff (1s/2s/4s); 5xx ve network hataları retry, 4xx tek deneme | ✅ |
+| Log korelasyon ID'si yok | `request_id` middleware — her request'e UUID16, `X-Request-ID` response header + `g.request_id` log binding | ✅ |
+| Audit log fiziksel silme | `AuditLog.deleted_at` kolonu — soft delete pattern (compliance retention) | ✅ |
+| DB backup automation yok | `scripts/backup.sh` — Postgres/SQLite otomatik tespit, gzip, retention rotation; cron örneği dokümanda | ✅ |
+
+### Açık (yol haritasında)
+
+| Konu | Etki | Plan |
+|---|---|---|
+| Alembic yok | Lightweight ALTER yeterli; karmaşıklaşırsa geç | Şema 30+ tabloyu geçtiğinde |
+| Test coverage düşük | Refactor riskli | Pytest skeleton var, kritik path coverage hedefi %50 |
 | `translations.py` tek dosya 70 kB | Merge conflict mıknatısı | Dil başına ayrı dosya + lazy load |
-| Authlib deprecation warning (`authlib.jose`) | Şu an çalışıyor, 2.0'da kırılacak | `joserfc`'e geç |
-| Inline SVG ikonlar | Bakımı zor | Bootstrap Icons + custom font birleştir |
-| `docker-compose.yml` `version` field obsolete | Sadece warning | Sil |
-| Sunucudaki `~/apps/radar/docker-compose.yml` git'le çakışıyor (port farkı) | Her pull'da stash gerekiyor | `docker-compose.override.yml` ile ayrıştır |
-| Webhook retry yok | Tek deneme — başarısız olursa kayıp | Celery retry policy |
-| Loglar JSON ama ID korelasyonu yok | Trace zor | request_id middleware |
+| Authlib deprecation (`authlib.jose`) | 2.0'da kırılacak | `joserfc`'e geç |
+| Sunucudaki override docker-compose | Her pull'da stash | `docker-compose.override.yml` ayrıştır |
 
 ---
 
-## 11. Güvenlik Notları
+## 11. Güvenlik Notları — Aktif Önlemler
 
-- ✅ Secret/PAT'lar `.env`'de, repoda yok (`.gitignore` korunuyor)
-- ✅ Mail verify zorunlu (silent ts=None bug'ı düzeltildi)
-- ✅ Google OAuth state validation Authlib'in kendisinde
+### Kimlik & Oturum
+- ✅ Parolalar werkzeug PBKDF2-SHA256 (salted)
+- ✅ Mail verify zorunlu (URLSafeTimedSerializer, süreli)
+- ✅ Google OAuth — Authlib state validation (CSRF koruması)
+- ✅ Cookie flag'leri: `HttpOnly`, `SameSite=Lax`, prod'da `Secure`
+
+### Web Katmanı (Yeni — flask-wtf, flask-limiter, flask-talisman)
+- ✅ **CSRF koruması**: Tüm POST formlarda `csrf_token`; API blueprint muaf (token-based)
+- ✅ **Rate limiting**: `/login` 10/dk + 50/saat, `/register` 5/dk + 20/saat; default 100/dk + 1000/saat
+- ✅ **Security headers** (Talisman): HSTS (1 yıl), `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
+- ✅ **Request ID**: Her request `X-Request-ID` header'ı taşır → log korelasyonu
+
+### Veri Erişimi
+- ✅ Multi-tenant izolasyon — her sorgu `tenant_id` filtresi
+- ✅ SQLAlchemy ORM — parametrize sorgular (SQL injection koruması)
+- ✅ `is_sample` flag tenant izolasyonunu bypass etmiyor
 - ✅ Postgres advisory lock — concurrent init race koruması
-- ✅ `is_sample` flag tenant izolasyonunu bypass etmiyor (sadece okuma)
-- ⚠️ CSRF token: form'larda manuel yok, flask-wtf eklenmeli
-- ⚠️ Rate limit yok — bruteforce login açık
-- ⚠️ Audit log delete = soft delete değil, fiziksel silme (compliance riski)
-- ⚠️ DB backup automation yok — manuel `pg_dump`
+- ✅ Audit log soft-delete — fiziksel silme yok, compliance retention
+
+### Operasyonel
+- ✅ Sırlar `.env`'de, repoda yok (`.gitignore` + 8 güvenlik testi)
+- ✅ DB backup script + retention rotation (`scripts/backup.sh`)
+- ✅ Bağımlılıklar pinli, CI'da `pip-audit` strict mode
+- ✅ Upload tavanı 10 MB (DoS yüzeyi azaltma)
+
+### Yol Haritası (Açık)
+- ⚠️ 2FA (TOTP) — özellikle admin rolleri için
+- ⚠️ Webhook outbound HMAC imzası varsayılan zorunlu
+- ⚠️ CSP (Content Security Policy) — şu an inline style/script var, refactor gerek
 
 ---
 

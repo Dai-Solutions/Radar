@@ -79,6 +79,10 @@ def create_app():
     
     # Initialize extensions
     init_extensions(app)
+
+    # Security layer: CSRF, rate limit, headers, request_id
+    from security_extensions import init_security
+    init_security(app)
     
     # Initialize i18n (Babel for multi-language support)
     init_babel(app)

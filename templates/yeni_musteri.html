@@ -35,6 +35,7 @@
 
                 <div class="glass-card p-4 p-md-5">
                     <form action="{{ url_for('customer.new_customer') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row g-4">
                             <!-- Basic Info -->
                             <div class="col-md-6">

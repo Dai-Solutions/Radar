@@ -64,7 +64,10 @@ class AuditLog(Base):
     status = Column(String, default='success')  # success, failure
     error_message = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    
+    # Soft delete — audit kayıtları compliance gereği fiziksel silinmez.
+    # Retention dolduğunda deleted_at set edilir; pruning ayrı job ile yapılır.
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
     tenant = relationship("Tenant", back_populates="audit_logs")
     user = relationship("User")
 
@@ -291,6 +294,9 @@ _PENDING_COLUMNS = {
         ('interest_expenses', 'FLOAT'),
         ('principal_payments', 'FLOAT'),
         ('sector', 'VARCHAR(32)'),
+    ],
+    'audit_logs': [
+        ('deleted_at', 'TIMESTAMP'),
     ],
 }
 

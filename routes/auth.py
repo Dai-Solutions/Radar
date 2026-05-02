@@ -7,6 +7,7 @@ import datetime
 import time
 
 from extensions import login_manager, oauth, mail
+from security_extensions import limiter
 # NOTE: `ts` (URLSafeTimedSerializer) is NOT imported here — it's None at module
 # import time and only gets set inside init_extensions(). All callsites use
 # `from extensions import ts as _ts` locally to capture the live value.
@@ -96,6 +97,7 @@ def admin_required(f):
     return wrapper
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute; 50 per hour", methods=['POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
@@ -124,6 +126,7 @@ def login():
     return render_template('login.html')
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per minute; 20 per hour", methods=['POST'])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))

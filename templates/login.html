@@ -167,6 +167,7 @@
         <div class="divider"><span>{{ t['or'] }}</span></div>
 
         <form action="{{ url_for('auth.login') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label>{{ t['email'] }}</label>
                 <input type="email" name="email" required placeholder="{{ t['email_placeholder'] }}">

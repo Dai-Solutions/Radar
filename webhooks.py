@@ -10,7 +10,31 @@ from datetime import datetime
 import requests
 import json
 import logging
+import time
 from functools import wraps
+
+# Retry policy: 3 attempt, exponential backoff (1s, 2s, 4s).
+# 5xx ve network hatalarında retry; 4xx (client error) tek deneme.
+WEBHOOK_MAX_ATTEMPTS = 3
+WEBHOOK_BACKOFF_BASE = 1.0
+
+
+def _post_with_retry(url, payload, headers, timeout=10):
+    """Webhook POST + exponential backoff retry. Son response veya raise eden Exception döner."""
+    last_exc = None
+    last_resp = None
+    for attempt in range(1, WEBHOOK_MAX_ATTEMPTS + 1):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+            last_resp = resp
+            # 5xx → retry; 2xx/3xx/4xx → final
+            if resp.status_code < 500:
+                return resp, None
+        except requests.RequestException as e:
+            last_exc = e
+        if attempt < WEBHOOK_MAX_ATTEMPTS:
+            time.sleep(WEBHOOK_BACKOFF_BASE * (2 ** (attempt - 1)))
+    return last_resp, last_exc
 
 logger = logging.getLogger(__name__)
 
@@ -113,51 +137,43 @@ class WebhookManager:
                     ).hexdigest()
                     headers['X-Webhook-Signature'] = signature
                 
-                response = requests.post(
-                    webhook.url,
-                    json=payload,
-                    headers=headers,
-                    timeout=10
-                )
-                
-                # Log event
-                event_log = WebhookEvent(
-                    webhook_id=webhook.id,
-                    event_type=event_type,
-                    payload=json.dumps(payload),
-                    response_status=response.status_code,
-                    response_body=response.text,
-                    error_message=None
-                )
-                
-                if response.status_code >= 400:
+                response, exc = _post_with_retry(webhook.url, payload, headers, timeout=10)
+
+                if exc is not None:
+                    logger.error(f'Webhook {webhook.id} failed after retries: {exc}')
                     webhook.failure_count += 1
-                    if webhook.failure_count >= 5:
-                        webhook.active = False  # Disable after 5 failures
-                        logger.warning(f'Webhook {webhook.id} disabled after {webhook.failure_count} failures')
+                    event_log = WebhookEvent(
+                        webhook_id=webhook.id,
+                        event_type=event_type,
+                        payload=json.dumps(payload),
+                        response_status=None,
+                        response_body=None,
+                        error_message=str(exc),
+                    )
                 else:
-                    webhook.failure_count = 0
-                
+                    event_log = WebhookEvent(
+                        webhook_id=webhook.id,
+                        event_type=event_type,
+                        payload=json.dumps(payload),
+                        response_status=response.status_code,
+                        response_body=response.text,
+                        error_message=None,
+                    )
+                    if response.status_code >= 400:
+                        webhook.failure_count += 1
+                        if webhook.failure_count >= 5:
+                            webhook.active = False
+                            logger.warning(f'Webhook {webhook.id} disabled after {webhook.failure_count} failures')
+                    else:
+                        webhook.failure_count = 0
+
                 webhook.last_triggered = datetime.utcnow()
-                
                 session.add(event_log)
                 session.commit()
-            
-            except requests.RequestException as e:
-                logger.error(f'Webhook trigger failed for {webhook.id}: {str(e)}')
-                
-                webhook.failure_count += 1
-                event_log = WebhookEvent(
-                    webhook_id=webhook.id,
-                    event_type=event_type,
-                    payload=json.dumps(data),
-                    response_status=None,
-                    response_body=None,
-                    error_message=str(e)
-                )
-                session.add(event_log)
-                session.commit()
-        
+            except Exception as e:
+                logger.exception(f'Webhook {webhook.id} unexpected failure: {e}')
+                session.rollback()
+
         session.close()
     
     @staticmethod
