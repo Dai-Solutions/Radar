@@ -1,7 +1,7 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from flask import Flask, render_template, session, redirect, url_for, request
+from flask import Flask, render_template, session, redirect, url_for, request, g
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 
@@ -156,6 +156,30 @@ def create_app():
 
     @app.errorhandler(500)
     def error_500(e):
+        # Yönetici uyarısı: 5xx hatasında admin e-postasına özet bildirim.
+        # Flask-mail başarısız olsa bile kullanıcıya 500 sayfası gösterilir.
+        try:
+            from flask_mail import Message
+            from flask_login import current_user
+            from extensions import mail
+            admin_email = os.getenv('ADMIN_EMAIL')
+            if admin_email and getattr(mail, 'app', None) is not None:
+                rid = getattr(g, 'request_id', '?')
+                user_email = getattr(current_user, 'email', '-') if current_user.is_authenticated else '-'
+                body = (
+                    f"Request ID : {rid}\n"
+                    f"Path       : {request.method} {request.path}\n"
+                    f"User       : {user_email}\n"
+                    f"Remote     : {request.remote_addr}\n"
+                    f"Exception  : {type(e).__name__}: {e}\n"
+                )
+                msg = Message(
+                    subject=f"[Radar 500] {request.path} ({rid})",
+                    recipients=[admin_email], body=body
+                )
+                mail.send(msg)
+        except Exception:
+            app.logger.exception('Admin alert failed')
         return render_template('errors.html', code=500, message="Sunucu tarafında bir hata oluştu. Lütfen teknik ekibe bildirin."), 500
 
     from sqlalchemy.exc import OperationalError
