@@ -294,16 +294,16 @@ class CreditScorer:
     def _create_assessment(self, res, liquidity, net_profit, z_score, inflation, lang):
         t = translations[lang]['expert_assessments']
         notes = []
-        
+
         # 1. Macro & Discipline
         if res.historical_score < 60:
             notes.append(t['weak_discipline'].format(delay=res.avg_delay_days, impact=5))
-        
+
         # 2. Risk Indicators (New Math)
         volatility = getattr(res, 'volatility', 0)
-        if volatility > 20: 
+        if volatility > 20:
             notes.append(translations[lang]['stability_alarm'].format(volatility=volatility))
-            
+
         dscr = getattr(res, 'dscr_score', 1.5)
         if dscr < 1.0:
             notes.append(t['debt_strain'].format(ratio=dscr * 100))
@@ -313,18 +313,138 @@ class CreditScorer:
         # 3. Solvency (Z-Score)
         if z_score < 1.81:
             notes.append(t['zscore_danger'])
-        
+
         # 4. Request Ratio
         if res.request_score < 40:
             notes.append(t['high_request'])
-            
+
         # 5. Inflation & Macro
         notes.append(t['inflation_warning'].format(inf=inflation))
-        
+
+        # --- 6. Yeni kategoriler: trend, sektör benchmark, mevsim, konsantrasyon, talep patlaması ---
+        for note_fn in (self._note_trend, self._note_sector_benchmark,
+                         self._note_seasonality, self._note_concentration,
+                         self._note_request_spike):
+            try:
+                msg = note_fn(res, t, lang)
+                if msg:
+                    notes.append(msg)
+            except Exception:
+                # Yorum üretiminde sessiz başarısızlık — ana skor etkilenmesin
+                pass
+
         if not notes:
             notes.append(t['reliable_profile'])
-            
+
         return " ".join(notes)
+
+    # ── Yorum üreticileri ──────────────────────────────────────────────────
+    # Her biri ya str döner ya None. None = veri yetersiz, yorum çıkmaz.
+
+    def _note_trend(self, res, t, lang):
+        """Son 3 dönem ile öncekilerin gecikme eğilimi karşılaştırması."""
+        past = [r for r in (self.aging_records or []) if getattr(r, 'type', 'past') == 'past']
+        if len(past) < 4:
+            return None
+        past_sorted = sorted(past, key=lambda r: r.period)
+        recent = past_sorted[-3:]
+        prior = past_sorted[:-3]
+        def avg_overdue(rs):
+            tot = sum((r.days_31_60 + r.days_61_90 + r.days_90_plus) for r in rs)
+            return tot / len(rs) if rs else 0
+        recent_avg = avg_overdue(recent)
+        prior_avg = avg_overdue(prior)
+        if prior_avg <= 0:
+            return None
+        delta_pct = (recent_avg - prior_avg) / prior_avg * 100
+        if abs(delta_pct) < 15:
+            return None  # değişim önemsiz
+        key = 'trend_worsening' if delta_pct > 0 else 'trend_improving'
+        return t.get(key, '').format(pct=abs(delta_pct))
+
+    def _note_sector_benchmark(self, res, t, lang):
+        """Aynı sektördeki diğer müşterilerin son skor medyanına karşı pozisyon."""
+        if not (self.session and self.customer and getattr(self.customer, 'sector', None)):
+            return None
+        from database import Customer, CreditScore
+        peer_scores = (self.session.query(CreditScore.final_score)
+                       .join(Customer, CreditScore.customer_id == Customer.id)
+                       .filter(Customer.sector == self.customer.sector,
+                               Customer.id != self.customer.id,
+                               CreditScore.final_score.isnot(None))
+                       .all())
+        peer_vals = sorted(s[0] for s in peer_scores if s[0] is not None)
+        if len(peer_vals) < 3:
+            return None
+        median = peer_vals[len(peer_vals) // 2]
+        delta = res.final_score - median
+        if abs(delta) < 5:
+            return None
+        key = 'sector_above' if delta > 0 else 'sector_below'
+        return t.get(key, '').format(delta=abs(delta), sector=self.customer.sector, n=len(peer_vals))
+
+    def _note_seasonality(self, res, t, lang):
+        """Yaşlandırma kayıtlarını çeyreklere ayır, en kötü çeyreği işaretle."""
+        past = [r for r in (self.aging_records or []) if getattr(r, 'type', 'past') == 'past']
+        if len(past) < 6:
+            return None
+        quarter_overdue = {1: [], 2: [], 3: [], 4: []}
+        for r in past:
+            try:
+                month = int(r.period.split('-')[1])
+            except (ValueError, IndexError, AttributeError):
+                continue
+            q = (month - 1) // 3 + 1
+            quarter_overdue[q].append(r.days_61_90 + r.days_90_plus)
+        avgs = {q: (sum(v) / len(v)) for q, v in quarter_overdue.items() if v}
+        if len(avgs) < 3:
+            return None
+        worst_q = max(avgs, key=avgs.get)
+        worst_val = avgs[worst_q]
+        overall_avg = sum(avgs.values()) / len(avgs)
+        if overall_avg <= 0 or worst_val < overall_avg * 1.5:
+            return None
+        return t.get('seasonality', '').format(quarter=worst_q, ratio=(worst_val / overall_avg))
+
+    def _note_concentration(self, res, t, lang):
+        """Bu müşterinin tenant portföyündeki avg_debt payı."""
+        if not (self.session and self.customer):
+            return None
+        from database import Customer, CreditScore
+        from sqlalchemy import func as sa_func
+        portfolio = (self.session.query(sa_func.sum(CreditScore.avg_debt))
+                     .join(Customer, CreditScore.customer_id == Customer.id)
+                     .filter(Customer.tenant_id == getattr(self.customer, 'tenant_id', None),
+                             CreditScore.avg_debt.isnot(None))
+                     .scalar() or 0)
+        if portfolio <= 0 or not res.avg_debt:
+            return None
+        share = (res.avg_debt / portfolio) * 100
+        if share < 25:
+            return None
+        return t.get('concentration', '').format(pct=share)
+
+    def _note_request_spike(self, res, t, lang):
+        """Bu talebin müşterinin geçmiş ortalamasına oranı."""
+        if not (self.session and self.customer_id):
+            return None
+        from database import CreditRequest
+        prev = (self.session.query(CreditRequest.request_amount)
+                .filter(CreditRequest.customer_id == self.customer_id,
+                        CreditRequest.request_amount.isnot(None))
+                .all())
+        prev_amounts = [a[0] for a in prev if a[0]]
+        # Şu anki dahil olabilir; en az 2 geçmiş gerekiyor
+        if len(prev_amounts) < 3:
+            return None
+        prior = prev_amounts[:-1]  # son hariç (mevcut talep)
+        prior_avg = sum(prior) / len(prior)
+        if prior_avg <= 0:
+            return None
+        ratio = res.request_amount / prior_avg
+        if ratio < 1.5:
+            return None
+        return t.get('request_spike', '').format(ratio=ratio, prior_avg=prior_avg)
 
     def _probability_analysis(self, settings, request_input, lang):
         scenarios = []
@@ -382,6 +502,57 @@ class CreditScorer:
             round(crit_score - median, 1),
             round(crit_score, 1)
         ))
+
+        # ── İsimli stres testleri (deterministik, single-shot) ──
+        # Her biri belirli bir piyasa şokunu modeller; MC dağılımından bağımsız.
+        named = translations[lang]['named_stress']
+
+        def _one_shot(mut):
+            sim_settings = copy.copy(settings)
+            sim_request = copy.copy(request_input)
+            mut(sim_settings, sim_request)
+            r = self.calculate(sim_settings, sim_request, skip_scenarios=True, lang=lang)
+            return round(r.final_score, 1)
+
+        # Faiz şoku: +10 puan
+        try:
+            s = _one_shot(lambda st, rq: st.__setitem__('interest_rate', base_interest + 10.0))
+            scenarios.append(ScenarioResult(named['rate_shock_name'], named['rate_shock_desc'],
+                                            round(s - median, 1), s))
+        except Exception:
+            pass
+
+        # Sektör çöküşü: sector_risk_factor × 1.5 (geçici override on customer)
+        try:
+            orig_srf = getattr(self.customer, 'sector_risk_factor', 1.0) if self.customer else 1.0
+            def _sector_mut(st, rq):
+                if self.customer:
+                    self.customer.sector_risk_factor = orig_srf * 1.5
+            s = _one_shot(_sector_mut)
+            if self.customer:
+                self.customer.sector_risk_factor = orig_srf
+            scenarios.append(ScenarioResult(named['sector_collapse_name'], named['sector_collapse_desc'],
+                                            round(s - median, 1), s))
+        except Exception:
+            if self.customer:
+                self.customer.sector_risk_factor = orig_srf
+            pass
+
+        # Likidite donması: liquidity_ratio × 0.7 (geçici override)
+        try:
+            orig_lq = getattr(self.customer, 'liquidity_ratio', 1.0) if self.customer else 1.0
+            def _liq_mut(st, rq):
+                if self.customer:
+                    self.customer.liquidity_ratio = max(0.1, orig_lq * 0.7)
+            s = _one_shot(_liq_mut)
+            if self.customer:
+                self.customer.liquidity_ratio = orig_lq
+            scenarios.append(ScenarioResult(named['liquidity_freeze_name'], named['liquidity_freeze_desc'],
+                                            round(s - median, 1), s))
+        except Exception:
+            if self.customer:
+                self.customer.liquidity_ratio = orig_lq
+            pass
 
         return scenarios
 

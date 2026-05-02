@@ -136,7 +136,14 @@ translations = {
             'inflation_warning': 'ENFLASYON ETKİSİ: %{inf} enflasyon ortamında borç maliyeti yükselmekte ve artan işletme giderleri ödeme kabiliyetini dolaylı olarak baskılamaktadır.',
             'term_strategy': 'VADE STRATEJİSİ: Mevcut risk profili ve makro beklentiler odağında, vadenin maksimum {days} gün ile sınırlandırılması finansal sürdürülebilirlik açısından kritiktir.',
             'inflation_vade_cap': 'ENFLASYON KORUMASI: %{inf} enflasyon kaynaklı reel değer kaybı riskine karşı, vade yapısı kurumsal limitlerle kısıtlanmıştır.',
-            'reliable_profile': 'Müşteri; hem ödeme istikrarı hem de finansal rasyolar açısından kurumsal düzeyde güvenilir bir performans sergilemektedir.'
+            'reliable_profile': 'Müşteri; hem ödeme istikrarı hem de finansal rasyolar açısından kurumsal düzeyde güvenilir bir performans sergilemektedir.',
+            'trend_worsening': 'TREND UYARISI: Son 3 dönem ödeme gecikmeleri önceki dönemlere göre %{pct:.0f} oranında kötüleşmiş; davranışsal momentum negatife dönmüştür.',
+            'trend_improving': 'POZİTİF TREND: Son 3 dönemde gecikmeler %{pct:.0f} oranında azalmış; ödeme disiplini iyileşme eğiliminde.',
+            'sector_above': 'SEKTÖR ÜSTÜ: {sector} sektöründeki {n} emsale göre skor medyanın {delta:.0f} puan üzerinde — rekabetçi konumda.',
+            'sector_below': 'SEKTÖR ALTI: {sector} sektöründeki {n} emsale göre skor medyanın {delta:.0f} puan altında — relatif zayıflık.',
+            'seasonality': 'MEVSİMSELLİK: Q{quarter} dönemlerinde gecikmeler ortalamanın {ratio:.1f}× üzerinde; bu çeyrekte limit/vade sıkılaştırılmalı.',
+            'concentration': 'PORTFÖY YOĞUNLAŞMASI: Bu müşteri tenant portföyünün %{pct:.0f}\'ini temsil ediyor; konsantrasyon riski kritik.',
+            'request_spike': 'TALEP SIÇRAMASI: Bu talep ({ratio:.1f}× geçmiş ortalama: {prior_avg:,.0f} TL) firma için olağandışı yüksek; gerekçe sorgulanmalı.'
         },
         'decision_details': {
             'approved_full': 'Kredi talebi tam olarak onaylanmıştır. Güçlü bilanço, makro direnç ve ödeme disiplini tam güven veriyor.',
@@ -220,6 +227,14 @@ translations = {
             'base_desc': 'Mevcut koşulların devam ettiği medyan durum.',
             'critical_name': 'Kötümser Senaryo (P10)',
             'critical_desc': 'Faizlerin yükseldiği ve ödeme hızının yavaşladığı stres testi.'
+        },
+        'named_stress': {
+            'rate_shock_name': 'Faiz Şoku (+10pp)',
+            'rate_shock_desc': 'Politika faizinin ani 10 puan artması durumunda skor etkisi.',
+            'sector_collapse_name': 'Sektör Çöküşü (×1.5)',
+            'sector_collapse_desc': 'Sektör risk faktörünün %50 artması durumunda skor etkisi.',
+            'liquidity_freeze_name': 'Likidite Donması (×0.7)',
+            'liquidity_freeze_desc': 'Cari oranın %30 daralması durumunda skor etkisi.'
         },
         'chart_score_dist': 'Skor Dağılımı (Simülasyon)',
         'impact_label': 'Skor Etkisi',
@@ -365,7 +380,14 @@ translations = {
             'inflation_warning': 'INFLATION IMPACT: In a %{inf} inflation environment, operating expenses indirectly pressure repayment capacity.',
             'term_strategy': 'VADE STRATEGY: Based on risk profile and macro outlook, limiting terms to {days} days is critical for financial sustainability.',
             'inflation_vade_cap': 'INFLATION PROTECTION: Due to %{inf} inflation risk, the payment term structural limits are strictly enforced.',
-            'reliable_profile': 'The customer demonstrates a high level of performance in both payment stability and financial ratios.'
+            'reliable_profile': 'The customer demonstrates a high level of performance in both payment stability and financial ratios.',
+            'trend_worsening': 'TREND ALERT: Payment delays in the last 3 periods have worsened by {pct:.0f}% vs prior periods; behavioral momentum has turned negative.',
+            'trend_improving': 'POSITIVE TREND: Delays have decreased by {pct:.0f}% over the last 3 periods; payment discipline is improving.',
+            'sector_above': 'ABOVE SECTOR: Score is {delta:.0f} points above the median of {n} peers in the {sector} sector — competitive positioning.',
+            'sector_below': 'BELOW SECTOR: Score is {delta:.0f} points below the median of {n} peers in the {sector} sector — relative weakness.',
+            'seasonality': 'SEASONALITY: Q{quarter} delays run {ratio:.1f}× the average; tighten limits/terms during this quarter.',
+            'concentration': 'PORTFOLIO CONCENTRATION: This customer represents {pct:.0f}% of the tenant portfolio; concentration risk is critical.',
+            'request_spike': 'REQUEST SPIKE: This request ({ratio:.1f}× historical average: {prior_avg:,.0f} TL) is unusually high for the firm; rationale should be questioned.'
         },
         'decision_details': {
             'approved_full': 'Credit request fully approved. Strong ratios and payment discipline are reassuring.',
@@ -380,6 +402,14 @@ translations = {
             'base_desc': 'Median outcome under current conditions.',
             'critical_name': 'Pessimistic Scenario (P10)',
             'critical_desc': 'Stress test where interest rates rise and payment speed slows.'
+        },
+        'named_stress': {
+            'rate_shock_name': 'Rate Shock (+10pp)',
+            'rate_shock_desc': 'Score impact under a sudden 10pp policy rate hike.',
+            'sector_collapse_name': 'Sector Collapse (×1.5)',
+            'sector_collapse_desc': 'Score impact if the sector risk factor rises by 50%.',
+            'liquidity_freeze_name': 'Liquidity Freeze (×0.7)',
+            'liquidity_freeze_desc': 'Score impact if the current ratio contracts by 30%.'
         },
         'chart_score_dist': 'Score Distribution (Simulation)',
         'impact_label': 'Score Impact',
@@ -588,7 +618,14 @@ translations = {
             'inflation_warning': 'EFECTO DE INFLACIÓN: En un entorno de %{inf} inflación, el costo de la deuda aumenta y los gastos operativos crecientes presionan indirectamente la capacidad de pago.',
             'term_strategy': 'ESTRATEGIA DE VENCIMIENTO: El perfil de riesgo actual y expectativas macroeconómicas requieren que el vencimiento sea limitado a máximo {days} días para sostenibilidad financiera.',
             'inflation_vade_cap': 'PROTECCIÓN CONTRA INFLACIÓN: Para proteger contra riesgo de pérdida de valor real por %{inf} inflación, la estructura de vencimiento está restringida por límites corporativos.',
-            'reliable_profile': 'El cliente demuestra un desempeño corporativo confiable tanto en estabilidad de pagos como en ratios financieros.'
+            'reliable_profile': 'El cliente demuestra un desempeño corporativo confiable tanto en estabilidad de pagos como en ratios financieros.',
+            'trend_worsening': 'ALERTA DE TENDENCIA: Los retrasos de pago en los últimos 3 períodos empeoraron un {pct:.0f}% frente a períodos anteriores; el momento conductual se volvió negativo.',
+            'trend_improving': 'TENDENCIA POSITIVA: Los retrasos disminuyeron un {pct:.0f}% en los últimos 3 períodos; la disciplina de pago está mejorando.',
+            'sector_above': 'SOBRE EL SECTOR: Puntuación {delta:.0f} puntos por encima de la mediana de {n} pares en el sector {sector} — posicionamiento competitivo.',
+            'sector_below': 'BAJO EL SECTOR: Puntuación {delta:.0f} puntos por debajo de la mediana de {n} pares en el sector {sector} — debilidad relativa.',
+            'seasonality': 'ESTACIONALIDAD: Los retrasos del Q{quarter} son {ratio:.1f}× el promedio; ajustar límites/plazos en este trimestre.',
+            'concentration': 'CONCENTRACIÓN DE CARTERA: Este cliente representa el {pct:.0f}% de la cartera del tenant; el riesgo de concentración es crítico.',
+            'request_spike': 'PICO DE SOLICITUD: Esta solicitud ({ratio:.1f}× el promedio histórico: {prior_avg:,.0f} TL) es inusualmente alta para la firma; debe cuestionarse la justificación.'
         },
         'decision_details': {
             'approved_full': 'La solicitud de crédito ha sido completamente aprobada. Balance fuerte, resistencia macroeconómica y disciplina de pago proporcionan plena confianza.',
@@ -672,6 +709,14 @@ translations = {
             'base_desc': 'Condiciones actuales continuando, caso mediano.',
             'critical_name': 'Escenario Pesimista (P10)',
             'critical_desc': 'Tasas de interés suben y velocidad de pago se ralentiza, prueba de estrés.'
+        },
+        'named_stress': {
+            'rate_shock_name': 'Choque de Tasa (+10pp)',
+            'rate_shock_desc': 'Impacto en la puntuación ante un alza repentina de 10pp en la tasa de política.',
+            'sector_collapse_name': 'Colapso Sectorial (×1.5)',
+            'sector_collapse_desc': 'Impacto en la puntuación si el factor de riesgo del sector aumenta un 50%.',
+            'liquidity_freeze_name': 'Congelamiento de Liquidez (×0.7)',
+            'liquidity_freeze_desc': 'Impacto en la puntuación si el ratio corriente se contrae un 30%.'
         },
         'chart_score_dist': 'Distribución de Puntuación (Simulación)',
         'impact_label': 'Impacto de Puntuación',
@@ -816,7 +861,14 @@ translations = {
             'inflation_warning': 'INFLATIONSEFFEKT: In einer Umgebung von %{inf} Inflation steigen die Schuldenkosten und erhöhte Betriebskosten belasten die Zahlungsfähigkeit indirekt.',
             'term_strategy': 'FÄLLIGKEITSSTRATEGIE: Das aktuelle Risikoprofil und makroökonomische Erwartungen erfordern, dass die Fälligkeit auf maximal {days} Tage begrenzt wird für finanzielle Nachhaltigkeit.',
             'inflation_vade_cap': 'INFLATIONSSCHUTZ: Zum Schutz vor Realwertverlustrisiko durch %{inf} Inflation ist die Fälligkeitsstruktur durch Unternehmenslimits begrenzt.',
-            'reliable_profile': 'Der Kunde zeigt zuverlässige Unternehmensleistung sowohl in Zahlungsstabilität als auch in Finanzkennzahlen.'
+            'reliable_profile': 'Der Kunde zeigt zuverlässige Unternehmensleistung sowohl in Zahlungsstabilität als auch in Finanzkennzahlen.',
+            'trend_worsening': 'TREND-WARNUNG: Zahlungsverzögerungen der letzten 3 Perioden haben sich um {pct:.0f}% gegenüber Vorperioden verschlechtert; das Verhaltensmomentum ist negativ geworden.',
+            'trend_improving': 'POSITIVER TREND: Verzögerungen sind in den letzten 3 Perioden um {pct:.0f}% zurückgegangen; Zahlungsdisziplin verbessert sich.',
+            'sector_above': 'ÜBER BRANCHENMEDIAN: Score liegt {delta:.0f} Punkte über dem Median von {n} Vergleichswerten in der Branche {sector} — wettbewerbsfähige Position.',
+            'sector_below': 'UNTER BRANCHENMEDIAN: Score liegt {delta:.0f} Punkte unter dem Median von {n} Vergleichswerten in der Branche {sector} — relative Schwäche.',
+            'seasonality': 'SAISONALITÄT: Verzögerungen im Q{quarter} liegen bei {ratio:.1f}× des Durchschnitts; Limits/Laufzeiten in diesem Quartal verschärfen.',
+            'concentration': 'PORTFOLIO-KONZENTRATION: Dieser Kunde repräsentiert {pct:.0f}% des Tenant-Portfolios; das Konzentrationsrisiko ist kritisch.',
+            'request_spike': 'ANFRAGE-SPIKE: Diese Anfrage ({ratio:.1f}× historischer Durchschnitt: {prior_avg:,.0f} TL) ist für die Firma ungewöhnlich hoch; Begründung sollte hinterfragt werden.'
         },
         'decision_details': {
             'approved_full': 'Der Kreditantrag wurde vollständig genehmigt. Starke Bilanz, makroökonomische Widerstandsfähigkeit und Zahlungsdisziplin bieten volles Vertrauen.',
@@ -900,6 +952,14 @@ translations = {
             'base_desc': 'Aktuelle Bedingungen bleiben bestehen, Medianfall.',
             'critical_name': 'Pessimistisches Szenario (P10)',
             'critical_desc': 'Zinssätze steigen und Zahlungsgeschwindigkeit verlangsamt sich, Stresstest.'
+        },
+        'named_stress': {
+            'rate_shock_name': 'Zinsschock (+10pp)',
+            'rate_shock_desc': 'Score-Auswirkung bei einer plötzlichen Zinserhöhung um 10pp.',
+            'sector_collapse_name': 'Branchenkollaps (×1.5)',
+            'sector_collapse_desc': 'Score-Auswirkung bei einem Anstieg des Branchenrisikofaktors um 50%.',
+            'liquidity_freeze_name': 'Liquiditätsstopp (×0.7)',
+            'liquidity_freeze_desc': 'Score-Auswirkung bei einer Kontraktion der Current Ratio um 30%.'
         },
         'chart_score_dist': 'Bewertungsverteilung (Simulation)',
         'impact_label': 'Bewertungsauswirkung',
