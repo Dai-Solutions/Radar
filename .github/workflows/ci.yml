@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pip-audit
+
+      - name: Run security smoke tests
+        env:
+          FLASK_SECRET_KEY: ci-test-secret-key-must-be-long-enough
+        run: pytest tests/ -v -m security
+
+      - name: Dependency vulnerability scan (pip-audit)
+        run: pip-audit --desc --strict || true   # bilgilendirme amaçlı, fail etme
+
+      - name: Translation key parity (TR/EN/ES/DE)
+        run: |
+          python -c "
+          from translations import translations
+          langs = list(translations.keys())
+          ref = langs[0]
+          ref_keys = set(translations[ref]['expert_assessments'].keys())
+          for l in langs[1:]:
+              diff = ref_keys ^ set(translations[l]['expert_assessments'].keys())
+              if diff: raise SystemExit(f'i18n parity break: {ref} vs {l} -> {diff}')
+          print('i18n parity OK across', langs)
+          "
