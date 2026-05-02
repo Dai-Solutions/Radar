@@ -1,7 +1,7 @@
 # Radar — A'dan Z'ye Teknik Dokümantasyon
 
 > Cari risk skorlama ve kredi karar destek platformu.
-> Son güncelleme: 2026-05-02
+> Son güncelleme: 2026-05-03
 
 ---
 
@@ -202,7 +202,7 @@ curl -I https://technodai.com/radar/
 
 - [ ] **Celery aktivasyon**: Excel import + skor batch'i async kuyruğa al (büyük dosyalarda timeout problemi var)
 - [ ] **Webhook event genişletme**: `score.calculated`, `customer.high_risk`, `request.spike` event'leri
-- [ ] **Rate limiting**: `flask-limiter` — `/api/v1/*` per-tenant kota
+- [ ] **Rate limiting (per-tenant API)**: Login/register için Redis-backed kota aktif; `/api/v1/*` için per-tenant kota açık iş
 - [ ] **Sektör verisi enjeksiyonu**: Halka açık sektör rasyo benchmark'ı (KGK / TÜİK / Findeks rapor) — şu an sadece peer median
 - [ ] **Notification channels**: E-posta + Slack + Discord — yüksek risk alarmları
 - [ ] **Multi-currency**: Şu an her şey TL — USD/EUR cari için FX snapshot tablosu
@@ -227,7 +227,13 @@ curl -I https://technodai.com/radar/
 | Webhook retry yok | `_post_with_retry` — 3 deneme + exponential backoff (1s/2s/4s); 5xx ve network hataları retry, 4xx tek deneme | ✅ |
 | Log korelasyon ID'si yok | `request_id` middleware — her request'e UUID16, `X-Request-ID` response header + `g.request_id` log binding | ✅ |
 | Audit log fiziksel silme | `AuditLog.deleted_at` kolonu — soft delete pattern (compliance retention) | ✅ |
-| DB backup automation yok | `scripts/backup.sh` — Postgres/SQLite otomatik tespit, gzip, retention rotation; cron örneği dokümanda | ✅ |
+| DB backup automation yok | `scripts/backup.sh` — Postgres/SQLite otomatik tespit, gzip, retention rotation; **prod cron 03:00** | ✅ |
+| Flask 3.0.0 CVE-2026-27205 | `flask>=3.1.3` pin'i + CI'da pip/wheel/setuptools upgrade | ✅ |
+| Rate limiter `memory://` workers arası bölünüyordu | `LIMITER_STORAGE_URI=redis://localhost:6379/1` — paylaşımlı sayaç, 11. wrong-pass'tan 429 döndüğü prod'da doğrulandı | ✅ |
+| Yönetici Değerlendirmesi rapor sonradan açıldığında dile uyumsuz (donmuş TR metni) | `assessment_i18n` / `decision_summary_i18n` — 4 dil JSON dict olarak DB'ye yazılır, view aktif dile düşer; eski kayıtlar geri uyumlu | ✅ |
+| Excel import'ta yeni `Customer` kayıtlarına `user_id` atanmıyordu | `current_user.id` ataması — sahipsiz kayıt sorunu giderildi | ✅ |
+| Menüde `Excel Yükleme` non-admin kullanıcıya görünüyordu (tıklayınca redirect) | `context_processor` `is_admin` bayrağı + `{% if is_admin %}` gating; redundant `Panel` linki kaldırıldı | ✅ |
+| 5xx hatasında bildirim yok | `errorhandler(500)` — `ADMIN_EMAIL`'e `request_id` + path + user + exception özetli mail | ✅ |
 
 ### Açık (yol haritasında)
 
@@ -249,11 +255,12 @@ curl -I https://technodai.com/radar/
 - ✅ Google OAuth — Authlib state validation (CSRF koruması)
 - ✅ Cookie flag'leri: `HttpOnly`, `SameSite=Lax`, prod'da `Secure`
 
-### Web Katmanı (Yeni — flask-wtf, flask-limiter, flask-talisman)
+### Web Katmanı (flask-wtf, flask-limiter, flask-talisman)
 - ✅ **CSRF koruması**: Tüm POST formlarda `csrf_token`; API blueprint muaf (token-based)
-- ✅ **Rate limiting**: `/login` 10/dk + 50/saat, `/register` 5/dk + 20/saat; default 100/dk + 1000/saat
+- ✅ **Rate limiting**: `/login` 10/dk + 50/saat, `/register` 5/dk + 20/saat; default 100/dk + 1000/saat. **Prod backend Redis** (`LIMITER_STORAGE_URI=redis://localhost:6379/1`) — workers arası paylaşımlı sayaç.
 - ✅ **Security headers** (Talisman): HSTS (1 yıl), `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
 - ✅ **Request ID**: Her request `X-Request-ID` header'ı taşır → log korelasyonu
+- ✅ **Menü admin gating**: `is_admin` context bayrağı, `@admin_required` gerektiren linkler non-admin kullanıcıdan gizleniyor
 
 ### Veri Erişimi
 - ✅ Multi-tenant izolasyon — her sorgu `tenant_id` filtresi
@@ -264,14 +271,16 @@ curl -I https://technodai.com/radar/
 
 ### Operasyonel
 - ✅ Sırlar `.env`'de, repoda yok (`.gitignore` + 8 güvenlik testi)
-- ✅ DB backup script + retention rotation (`scripts/backup.sh`)
-- ✅ Bağımlılıklar pinli, CI'da `pip-audit` strict mode
+- ✅ DB backup script + retention rotation (`scripts/backup.sh`) — **prod cron her gece 03:00**
+- ✅ Bağımlılıklar pinli, CI'da `pip-audit --strict` (Flask CVE bump dahil)
 - ✅ Upload tavanı 10 MB (DoS yüzeyi azaltma)
+- ✅ **5xx admin alert**: `errorhandler(500)` `ADMIN_EMAIL` adresine request_id + exception bildirir
 
 ### Yol Haritası (Açık)
 - ⚠️ 2FA (TOTP) — özellikle admin rolleri için
 - ⚠️ Webhook outbound HMAC imzası varsayılan zorunlu
 - ⚠️ CSP (Content Security Policy) — şu an inline style/script var, refactor gerek
+- ⚠️ Authlib `joserfc` geçişi (2.0 deprecation)
 
 ---
 
