@@ -103,7 +103,8 @@ def credit_request():
             instant_equity=customer.equity, instant_liquidity=customer.liquidity_ratio,
             instant_net_profit=customer.annual_net_profit,
             trend_score=res.momentum_score, trend_direction=res.trend_direction,
-            assessment=res.assessment, decision_summary=res.decision_summary,
+            assessment=json.dumps(res.assessment_i18n, ensure_ascii=False) if getattr(res, 'assessment_i18n', None) else res.assessment,
+            decision_summary=json.dumps(res.decision_summary_i18n, ensure_ascii=False) if getattr(res, 'decision_summary_i18n', None) else res.decision_summary,
             scenarios_json=scenarios_payload,
             vade_days=res.vade_days, vade_message=res.vade_message,
             z_score=res.z_score, z_score_note=res.z_score_note,
@@ -156,11 +157,23 @@ def report_view(talep_id):
             except (ValueError, TypeError):
                 scenarios = []
 
+        def _pick_i18n(text, lang):
+            """JSON ise aktif dile düş; düz metin (legacy) ise olduğu gibi döndür."""
+            if not text:
+                return ''
+            try:
+                d = json.loads(text)
+                if isinstance(d, dict):
+                    return d.get(lang) or d.get('tr') or next(iter(d.values()), '')
+            except (ValueError, TypeError):
+                pass
+            return text
+
         class ResultWrapper:
             def __init__(self, s, scenarios):
                 self.credit_note = s.credit_note
                 self.final_score = s.final_score
-                self.decision_summary = s.decision_summary
+                self.decision_summary = _pick_i18n(s.decision_summary, lang)
                 self.trend_direction = s.trend_direction
                 self.max_capacity = s.max_capacity
                 self.recommended_limit = s.recommended_limit
@@ -168,7 +181,7 @@ def report_view(talep_id):
                 self.future_score = s.future_score
                 self.request_score = s.request_score
                 self.momentum_score = s.trend_score
-                self.assessment = s.assessment
+                self.assessment = _pick_i18n(s.assessment, lang)
                 self.vade_days = s.vade_days
                 self.vade_message = s.vade_message
                 self.scenarios = scenarios

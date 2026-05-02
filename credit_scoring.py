@@ -43,6 +43,8 @@ class CreditScoreResult:
     recommended_limit: float
     recommendation_message: str
     assessment: str = ""
+    assessment_i18n: dict = field(default_factory=dict)
+    decision_summary_i18n: dict = field(default_factory=dict)
     scenarios: List = field(default_factory=list)
     momentum_score: float = 0
     trend_direction: str = 'stable'
@@ -255,10 +257,20 @@ class CreditScorer:
             icr_score=icr, aging_concentration=aging_conc,
         )
 
-        result.decision_summary = self._create_decision_summary(result, lang)
+        # i18n: Yorum metinlerini 4 dilde üret. Rapor sonradan farklı dilde
+        # açıldığında dondurulmuş TR metni değil, aktif dilin metni gösterilir.
+        all_langs = ('tr', 'en', 'es', 'de')
+        result.decision_summary_i18n = {
+            L: self._create_decision_summary(result, L) for L in all_langs
+        }
+        result.decision_summary = result.decision_summary_i18n[lang]
 
         if not skip_scenarios:
-            result.assessment = self._create_assessment(result, liquidity, net_profit, z_score, inflation_rate, lang)
+            result.assessment_i18n = {
+                L: self._create_assessment(result, liquidity, net_profit, z_score, inflation_rate, L)
+                for L in all_langs
+            }
+            result.assessment = result.assessment_i18n[lang]
             result.scenarios = self._probability_analysis(settings, request_input, lang)
 
         return result

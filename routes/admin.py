@@ -120,7 +120,8 @@ def import_excel():
         for b in balance_list:
             c = session.query(Customer).filter(Customer.account_code == b['account_code']).first()
             if not c:
-                c = Customer(account_code=b['account_code'], account_name=b['account_name'])
+                c = Customer(account_code=b['account_code'], account_name=b['account_name'],
+                             user_id=current_user.id)
                 session.add(c)
                 session.flush()
             
