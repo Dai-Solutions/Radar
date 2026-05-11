@@ -1,12 +1,15 @@
-from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app, send_file, jsonify
+from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app, send_file, jsonify, Response
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
+import csv
+import io
 import os
 import json
 import time
 import uuid
+from datetime import datetime, timedelta
 
-from database import get_session, Customer, AgingRecord as AgingRecordDB
+from database import get_session, Customer, AgingRecord as AgingRecordDB, AuditLog, User, SSOConfig
 from excel_import import ExcelImporter
 from extensions import mail
 from flask_mail import Message
@@ -149,6 +152,202 @@ def download_sample():
     importer = ExcelImporter()
     importer.create_template(sample_path)
     return send_file(sample_path, as_attachment=True, download_name='radar_1_0_sample.xlsx')
+
+@admin_bp.route('/audit-log')
+@login_required
+@admin_required
+def audit_log():
+    session = get_session()
+    try:
+        PAGE_SIZE = 50
+        page = max(1, int(request.args.get('page', 1)))
+
+        action_filter      = request.args.get('action', '').strip()
+        entity_filter      = request.args.get('entity_type', '').strip()
+        status_filter      = request.args.get('status', '').strip()
+        from_date_str      = request.args.get('from_date', '').strip()
+        to_date_str        = request.args.get('to_date', '').strip()
+
+        tenant_id = getattr(current_user, 'tenant_id', 1) or 1
+        q = session.query(AuditLog).filter(AuditLog.tenant_id == tenant_id)
+
+        if action_filter:
+            q = q.filter(AuditLog.action == action_filter)
+        if entity_filter:
+            q = q.filter(AuditLog.entity_type == entity_filter)
+        if status_filter:
+            q = q.filter(AuditLog.status == status_filter)
+        if from_date_str:
+            try:
+                q = q.filter(AuditLog.timestamp >= datetime.strptime(from_date_str, '%Y-%m-%d'))
+            except ValueError:
+                pass
+        if to_date_str:
+            try:
+                end = datetime.strptime(to_date_str, '%Y-%m-%d') + timedelta(days=1)
+                q = q.filter(AuditLog.timestamp < end)
+            except ValueError:
+                pass
+
+        # soft-deleted kayıtları gizle
+        q = q.filter(AuditLog.deleted_at.is_(None))
+
+        total = q.count()
+        logs  = (q.order_by(AuditLog.timestamp.desc())
+                  .offset((page - 1) * PAGE_SIZE)
+                  .limit(PAGE_SIZE)
+                  .all())
+
+        # kullanıcı e-posta eşleme
+        user_ids = {l.user_id for l in logs if l.user_id}
+        users = {u.id: u.email for u in session.query(User).filter(User.id.in_(user_ids)).all()}
+
+        # filtre seçenekleri — dropdown'lar için mevcut değerler
+        distinct_actions = [r[0] for r in
+            session.query(AuditLog.action).filter(AuditLog.tenant_id == tenant_id)
+                   .filter(AuditLog.deleted_at.is_(None)).distinct().all() if r[0]]
+        distinct_entities = [r[0] for r in
+            session.query(AuditLog.entity_type).filter(AuditLog.tenant_id == tenant_id)
+                   .filter(AuditLog.deleted_at.is_(None)).distinct().all() if r[0]]
+
+        total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+
+        return render_template(
+            'audit_log.html',
+            logs=logs,
+            users=users,
+            page=page,
+            total=total,
+            total_pages=total_pages,
+            page_size=PAGE_SIZE,
+            distinct_actions=sorted(distinct_actions),
+            distinct_entities=sorted(distinct_entities),
+            # aktif filtreler template'e geri
+            f_action=action_filter,
+            f_entity=entity_filter,
+            f_status=status_filter,
+            f_from=from_date_str,
+            f_to=to_date_str,
+        )
+    finally:
+        session.close()
+
+
+@admin_bp.route('/audit-log/export')
+@login_required
+@admin_required
+def audit_log_export():
+    """Mevcut filtreyi CSV olarak indir."""
+    session = get_session()
+    try:
+        action_filter  = request.args.get('action', '').strip()
+        entity_filter  = request.args.get('entity_type', '').strip()
+        status_filter  = request.args.get('status', '').strip()
+        from_date_str  = request.args.get('from_date', '').strip()
+        to_date_str    = request.args.get('to_date', '').strip()
+
+        tenant_id = getattr(current_user, 'tenant_id', 1) or 1
+        q = session.query(AuditLog).filter(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.deleted_at.is_(None),
+        )
+        if action_filter:
+            q = q.filter(AuditLog.action == action_filter)
+        if entity_filter:
+            q = q.filter(AuditLog.entity_type == entity_filter)
+        if status_filter:
+            q = q.filter(AuditLog.status == status_filter)
+        if from_date_str:
+            try:
+                q = q.filter(AuditLog.timestamp >= datetime.strptime(from_date_str, '%Y-%m-%d'))
+            except ValueError:
+                pass
+        if to_date_str:
+            try:
+                q = q.filter(AuditLog.timestamp < datetime.strptime(to_date_str, '%Y-%m-%d') + timedelta(days=1))
+            except ValueError:
+                pass
+
+        logs = q.order_by(AuditLog.timestamp.desc()).limit(5000).all()
+
+        user_ids = {l.user_id for l in logs if l.user_id}
+        users = {u.id: u.email for u in session.query(User).filter(User.id.in_(user_ids)).all()}
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(['timestamp', 'user', 'action', 'entity_type', 'entity_id',
+                         'status', 'ip_address', 'error_message'])
+        for log in logs:
+            writer.writerow([
+                log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else '',
+                users.get(log.user_id, str(log.user_id or '')),
+                log.action or '',
+                log.entity_type or '',
+                log.entity_id or '',
+                log.status or '',
+                log.ip_address or '',
+                log.error_message or '',
+            ])
+
+        filename = f"audit_log_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+        return Response(
+            buf.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={filename}'},
+        )
+    finally:
+        session.close()
+
+
+@admin_bp.route('/sso-config', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def sso_config():
+    """Kurumsal SSO yapılandırması — SAML 2.0 veya LDAP/AD."""
+    db_session = get_session()
+    try:
+        config = db_session.query(SSOConfig).filter(SSOConfig.tenant_id == 1).first()
+
+        if request.method == 'POST':
+            provider_type = request.form.get('provider_type', 'saml')
+
+            if not config:
+                config = SSOConfig(tenant_id=1)
+                db_session.add(config)
+
+            config.provider_type = provider_type
+            config.is_active = bool(request.form.get('is_active'))
+
+            if provider_type == 'saml':
+                config.idp_entity_id = request.form.get('idp_entity_id', '').strip()
+                config.idp_sso_url = request.form.get('idp_sso_url', '').strip()
+                config.idp_slo_url = request.form.get('idp_slo_url', '').strip()
+                config.idp_x509_cert = request.form.get('idp_x509_cert', '').strip()
+                config.sp_entity_id = request.form.get('sp_entity_id', '').strip()
+            else:
+                config.ldap_host = request.form.get('ldap_host', '').strip()
+                config.ldap_port = int(request.form.get('ldap_port') or 389)
+                config.ldap_use_ssl = bool(request.form.get('ldap_use_ssl'))
+                config.ldap_base_dn = request.form.get('ldap_base_dn', '').strip()
+                config.ldap_bind_dn = request.form.get('ldap_bind_dn', '').strip()
+                pw = request.form.get('ldap_bind_password', '')
+                if pw:
+                    config.ldap_bind_password = pw
+                config.ldap_user_search_filter = (
+                    request.form.get('ldap_user_search_filter', '').strip()
+                    or '(sAMAccountName={username})'
+                )
+                config.ldap_email_attr = request.form.get('ldap_email_attr', '').strip() or 'mail'
+                config.ldap_name_attr = request.form.get('ldap_name_attr', '').strip() or 'displayName'
+
+            db_session.commit()
+            flash('SSO yapılandırması kaydedildi.', 'success')
+            return redirect(url_for('admin.sso_config'))
+
+        return render_template('sso_config.html', config=config)
+    finally:
+        db_session.close()
+
 
 @admin_bp.route('/submit_feedback', methods=['POST'])
 @login_required

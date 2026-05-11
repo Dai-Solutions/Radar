@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+
+{% block title %}Audit Log{% endblock %}
+
+{% block extra_style %}
+        .filter-bar { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 1.25rem 1.5rem; }
+        .table-premium { background: transparent !important; color: var(--dark); }
+        .table-premium thead th {
+            background: #f8fafc; border-bottom: 2px solid var(--border);
+            color: var(--secondary); font-size: 0.65rem;
+            text-transform: uppercase; letter-spacing: 1px; padding: 14px 12px;
+        }
+        .table-premium tbody td { padding: 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .action-badge {
+            display: inline-block; padding: 3px 10px; border-radius: 20px;
+            font-size: 0.65rem; font-weight: 800; letter-spacing: 0.5px; white-space: nowrap;
+        }
+        .action-kkb    { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+        .action-score  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+        .action-login  { background: #faf5ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+        .action-denied { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .action-other  { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+        .page-btn { min-width: 36px; height: 36px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; }
+{% endblock %}
+
+{% block content %}
+<div class="container main-container">
+
+    <!-- Başlık -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+        <div>
+            <h4 class="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                <i class="bi bi-journal-text text-primary"></i> Audit Log
+            </h4>
+            <p class="text-muted small mb-0">
+                Toplam <strong>{{ total }}</strong> kayıt
+                {% if f_action or f_entity or f_status or f_from or f_to %} · Filtre aktif{% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('admin.audit_log_export', action=f_action, entity_type=f_entity, status=f_status, from_date=f_from, to_date=f_to) }}"
+               class="btn btn-outline-secondary rounded-pill px-4 fw-bold" style="font-size:0.8rem;">
+                <i class="bi bi-download me-1"></i>CSV İndir
+            </a>
+            <a href="{{ url_for('main.index') }}" class="btn btn-outline-primary rounded-pill px-4 fw-bold" style="font-size:0.8rem;">
+                <i class="bi bi-arrow-left me-1"></i>Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtre Çubuğu -->
+    <form method="GET" action="{{ url_for('admin.audit_log') }}" class="filter-bar mb-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-secondary text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Aksiyon</label>
+                <select name="action" class="form-select form-select-sm border-light-subtle bg-light">
+                    <option value="">— Tümü —</option>
+                    {% for a in distinct_actions %}
+                    <option value="{{ a }}" {{ 'selected' if f_action == a }}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-secondary text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Varlık Tipi</label>
+                <select name="entity_type" class="form-select form-select-sm border-light-subtle bg-light">
+                    <option value="">— Tümü —</option>
+                    {% for e in distinct_entities %}
+                    <option value="{{ e }}" {{ 'selected' if f_entity == e }}>{{ e }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-secondary text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Durum</label>
+                <select name="status" class="form-select form-select-sm border-light-subtle bg-light">
+                    <option value="">— Tümü —</option>
+                    <option value="success"  {{ 'selected' if f_status == 'success' }}>Başarılı</option>
+                    <option value="failure"  {{ 'selected' if f_status == 'failure' }}>Başarısız</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-secondary text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Başlangıç</label>
+                <input type="date" name="from_date" value="{{ f_from }}" class="form-control form-control-sm border-light-subtle bg-light">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-secondary text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Bitiş</label>
+                <input type="date" name="to_date" value="{{ f_to }}" class="form-control form-control-sm border-light-subtle bg-light">
+            </div>
+            <div class="col-md-1 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill w-100 fw-bold">Filtrele</button>
+            </div>
+        </div>
+        {% if f_action or f_entity or f_status or f_from or f_to %}
+        <div class="mt-2">
+            <a href="{{ url_for('admin.audit_log') }}" class="small text-muted text-decoration-none">
+                <i class="bi bi-x-circle me-1"></i>Filtreyi temizle
+            </a>
+        </div>
+        {% endif %}
+    </form>
+
+    <!-- Tablo -->
+    <div class="glass-card overflow-hidden border-0 shadow-sm mb-4">
+        <div class="table-responsive">
+            <table class="table table-premium mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4" style="min-width:150px;">Zaman</th>
+                        <th style="min-width:180px;">Kullanıcı</th>
+                        <th>Aksiyon</th>
+                        <th>Varlık</th>
+                        <th class="text-center">Durum</th>
+                        <th class="pe-4">IP Adresi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr class="{{ 'table-danger bg-opacity-10' if log.status == 'failure' else '' }}">
+                        <td class="ps-4">
+                            <span class="small fw-bold text-dark font-monospace">
+                                {{ log.timestamp.strftime('%d/%m/%Y') if log.timestamp else '—' }}
+                            </span>
+                            <span class="small text-muted d-block">
+                                {{ log.timestamp.strftime('%H:%M:%S') if log.timestamp else '' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="small fw-bold text-dark">
+                                {{ users.get(log.user_id, '—') }}
+                            </span>
+                        </td>
+                        <td>
+                            {% set a = log.action or '' %}
+                            {% if 'kkb' in a %}
+                                <span class="action-badge action-kkb"><i class="bi bi-bank me-1"></i>{{ a }}</span>
+                            {% elif 'score' in a or 'credit' in a %}
+                                <span class="action-badge action-score"><i class="bi bi-speedometer2 me-1"></i>{{ a }}</span>
+                            {% elif 'login' in a or 'logout' in a or 'register' in a %}
+                                <span class="action-badge action-login"><i class="bi bi-person me-1"></i>{{ a }}</span>
+                            {% elif 'denied' in a or 'failure' in (log.status or '') %}
+                                <span class="action-badge action-denied"><i class="bi bi-shield-x me-1"></i>{{ a }}</span>
+                            {% else %}
+                                <span class="action-badge action-other">{{ a or '—' }}</span>
+                            {% endif %}
+                            {% if log.error_message %}
+                            <span class="d-block small text-danger mt-1 opacity-75" title="{{ log.error_message }}">
+                                <i class="bi bi-exclamation-circle me-1"></i>{{ log.error_message[:60] }}{% if log.error_message|length > 60 %}…{% endif %}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.entity_type %}
+                            <span class="small fw-bold text-secondary">{{ log.entity_type }}</span>
+                            {% if log.entity_id %}
+                            <code class="text-primary ms-1" style="background:#eff6ff;padding:1px 6px;border-radius:4px;font-size:0.7rem;">#{{ log.entity_id }}</code>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if log.status == 'success' %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill" style="font-size:0.65rem;">
+                                <i class="bi bi-check me-1"></i>OK
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill" style="font-size:0.65rem;">
+                                <i class="bi bi-x me-1"></i>HATA
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="pe-4">
+                            <code class="small text-muted">{{ log.ip_address or '—' }}</code>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <i class="bi bi-journal-x fs-1 d-block mb-3 opacity-25"></i>
+                            Kayıt bulunamadı.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Sayfalama -->
+    {% if total_pages > 1 %}
+    <nav class="d-flex justify-content-center align-items-center gap-2 mb-5">
+        {% if page > 1 %}
+        <a href="{{ url_for('admin.audit_log', page=page-1, action=f_action, entity_type=f_entity, status=f_status, from_date=f_from, to_date=f_to) }}"
+           class="btn btn-outline-secondary page-btn">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        {% endif %}
+
+        {% set start_p = [1, page - 2] | max %}
+        {% set end_p   = [total_pages, page + 2] | min %}
+        {% for p in range(start_p, end_p + 1) %}
+        <a href="{{ url_for('admin.audit_log', page=p, action=f_action, entity_type=f_entity, status=f_status, from_date=f_from, to_date=f_to) }}"
+           class="btn page-btn {{ 'btn-primary' if p == page else 'btn-outline-secondary' }}">{{ p }}</a>
+        {% endfor %}
+
+        {% if page < total_pages %}
+        <a href="{{ url_for('admin.audit_log', page=page+1, action=f_action, entity_type=f_entity, status=f_status, from_date=f_from, to_date=f_to) }}"
+           class="btn btn-outline-secondary page-btn">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+        {% endif %}
+
+        <span class="text-muted small ms-2">Sayfa {{ page }} / {{ total_pages }}</span>
+    </nav>
+    {% endif %}
+
+</div>
+{% endblock %}
