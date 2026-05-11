@@ -2,6 +2,17 @@
 
 {% block title %}{{ t['dashboard'] }}{% endblock %}
 
+{% block page_guide %}
+<div class="guide-title"><i class="bi bi-house-door me-1"></i>Ana Sayfa — Müşteri Listesi</div>
+<p class="guide-text">Bu ekran, sistemdeki tüm müşterileri ve son kredi skorlarını listeler.</p>
+<ul class="guide-steps">
+  <li><strong>Yeni Müşteri Ekle</strong> butonuyla müşteri kaydı oluşturun.</li>
+  <li>Müşteri adına tıklayarak detay sayfasına, oradan kredi skoru hesaplatabilirsiniz.</li>
+  <li>Üst menüden <strong>Portföy</strong> ile tüm müşterileri toplu analiz edebilirsiniz.</li>
+  <li>Admin iseniz <strong>İçe Aktar</strong> ile Excel'den toplu yükleme yapabilirsiniz.</li>
+</ul>
+{% endblock %}
+
 {% block extra_style %}
         .table-premium { background: transparent !important; color: var(--dark); }
         .table-premium thead th {

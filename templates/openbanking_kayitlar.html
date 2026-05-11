@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid px-4 py-4">
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{{ url_for('openbanking.panel') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h2 class="fw-bold mb-0">Open Banking Kayıtları</h2>
+    <span class="badge bg-secondary ms-1">{{ records | length }}</span>
+  </div>
+
+  <div class="card bg-dark border-secondary">
+    <div class="card-body p-0">
+      {% if records %}
+      <div style="overflow-x:auto;">
+      <table class="table table-dark table-hover table-sm mb-0 align-middle">
+        <thead class="text-secondary" style="font-size:.8rem;">
+          <tr>
+            <th class="ps-3">#</th>
+            <th>IBAN</th>
+            <th>Müşteri</th>
+            <th class="text-end">Ort. Bakiye</th>
+            <th class="text-end">Aylık Giriş</th>
+            <th class="text-end">Aylık Çıkış</th>
+            <th class="text-center">Düzenlilik</th>
+            <th class="text-center">Overdraft</th>
+            <th class="text-center">KVKK</th>
+            <th>Kaynak</th>
+            <th>TTL</th>
+            <th>Tarih</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td class="ps-3 text-secondary">{{ r.id }}</td>
+            <td class="font-monospace" style="font-size:.8rem;">{{ r.iban }}</td>
+            <td class="text-secondary">{{ r.customer_id or '—' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(r.avg_monthly_balance or 0) }} ₺</td>
+            <td class="text-end text-success">+{{ "{:,.0f}".format(r.avg_monthly_inflow or 0) }} ₺</td>
+            <td class="text-end text-danger">-{{ "{:,.0f}".format(r.avg_monthly_outflow or 0) }} ₺</td>
+            <td class="text-center">
+              <span class="badge
+                {% if (r.cashflow_regularity or 0) >= 0.8 %}bg-success
+                {% elif (r.cashflow_regularity or 0) >= 0.5 %}bg-warning text-dark
+                {% else %}bg-danger{% endif %}">
+                {{ "%.0f"|format((r.cashflow_regularity or 0) * 100) }}%
+              </span>
+            </td>
+            <td class="text-center">{{ r.overdraft_count or 0 }}</td>
+            <td class="text-center">
+              {% if r.consent_given %}
+                <i class="bi bi-check-circle text-success"></i>
+              {% else %}
+                <i class="bi bi-x-circle text-danger"></i>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-secondary">{{ r.source }}</span></td>
+            <td class="text-secondary" style="font-size:.78rem;">
+              {{ r.expires_at.strftime('%d.%m.%Y') if r.expires_at else '—' }}
+            </td>
+            <td class="text-secondary" style="font-size:.78rem;">
+              {{ r.fetched_at.strftime('%d.%m.%Y %H:%M') }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 text-secondary">
+        <i class="bi bi-bank2 fs-1 d-block mb-2"></i>
+        Henüz Open Banking kaydı yok.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

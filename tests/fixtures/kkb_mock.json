@@ -1,0 +1,68 @@
+{
+  "_comment": "KKB mock fixture — geliştirme ortamı için. Vergi no → KKB rapor alanları.",
+
+  "1234567890": {
+    "_label": "Temiz profil — A notu",
+    "total_bank_exposure": 1200000.0,
+    "npl_amount": 0.0,
+    "npl_flag": false,
+    "max_days_past_due": 5,
+    "num_late_payments": 1,
+    "has_bounced_check": false,
+    "active_enforcement": false,
+    "kkb_score": 1650,
+    "kkb_grade": "A"
+  },
+
+  "9876543210": {
+    "_label": "Orta riskli — B notu, kısa vadeli gecikmeler",
+    "total_bank_exposure": 3500000.0,
+    "npl_amount": 0.0,
+    "npl_flag": false,
+    "max_days_past_due": 42,
+    "num_late_payments": 4,
+    "has_bounced_check": false,
+    "active_enforcement": false,
+    "kkb_score": 1120,
+    "kkb_grade": "B"
+  },
+
+  "1111111111": {
+    "_label": "Hard veto — karşılıksız çek",
+    "total_bank_exposure": 800000.0,
+    "npl_amount": 150000.0,
+    "npl_flag": false,
+    "max_days_past_due": 18,
+    "num_late_payments": 2,
+    "has_bounced_check": true,
+    "active_enforcement": false,
+    "kkb_score": 780,
+    "kkb_grade": "C"
+  },
+
+  "2222222222": {
+    "_label": "Hard veto — aktif icra + NPL",
+    "total_bank_exposure": 5000000.0,
+    "npl_amount": 1800000.0,
+    "npl_flag": true,
+    "max_days_past_due": 120,
+    "num_late_payments": 9,
+    "has_bounced_check": false,
+    "active_enforcement": true,
+    "kkb_score": 420,
+    "kkb_grade": "D"
+  },
+
+  "3333333333": {
+    "_label": "Yüksek maruz kalım, temiz geçmiş",
+    "total_bank_exposure": 15000000.0,
+    "npl_amount": 0.0,
+    "npl_flag": false,
+    "max_days_past_due": 0,
+    "num_late_payments": 0,
+    "has_bounced_check": false,
+    "active_enforcement": false,
+    "kkb_score": 1820,
+    "kkb_grade": "A"
+  }
+}

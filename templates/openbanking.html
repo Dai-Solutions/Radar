@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+
+{% block page_guide %}
+<div class="guide-title"><i class="bi bi-bank me-1"></i>Open Banking — Banka Hesap Analizi</div>
+<p class="guide-text">Müşterilerin IBAN'ları üzerinden banka hesap hareketlerini çekerek skor hesaplamayı zenginleştirir.</p>
+<ul class="guide-steps">
+  <li><strong>IBAN Test</strong>: Tek bir IBAN için mock/sandbox verisini test edin.</li>
+  <li><strong>Müşteri Sorgula</strong>: Seçili müşteri için OB verisi çekin ve kaydedin (7 gün önbellek).</li>
+  <li>OB verisi, <em>historical_score</em> ve <em>future_score</em>'a %25 ağırlıkla eklenir.</li>
+  <li>Mod: <code>OB_MODE=mock</code> → deterministik test, <code>live</code> → gerçek API.</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4" style="max-width:960px;">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">Open Banking Entegrasyonu</h2>
+      <p class="text-secondary mb-0 small">
+        BKM / Berlin Group NextGenPSD2 — hesap cashflow verisiyle skor zenginleştirme
+      </p>
+    </div>
+    <a href="{{ url_for('openbanking.kayitlar') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-list-ul me-1"></i> Tüm Kayıtlar ({{ total }})
+    </a>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+        {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="row g-3 mb-4">
+    <!-- Mevcut Konfigürasyon -->
+    <div class="col-md-5">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header border-secondary fw-semibold">Aktif Konfigürasyon</div>
+        <div class="card-body small">
+          <table class="table table-dark table-sm mb-3">
+            <tr>
+              <td class="text-secondary">Mod</td>
+              <td>
+                <span class="badge
+                  {% if config.mode == 'live' %}bg-success
+                  {% elif config.mode == 'sandbox' %}bg-warning text-dark
+                  {% else %}bg-secondary{% endif %}">
+                  {{ config.mode | upper }}
+                </span>
+              </td>
+            </tr>
+            <tr><td class="text-secondary">Base URL</td>
+                <td>{{ config.base_url or '(mock — URL gerekmez)' }}</td></tr>
+            <tr><td class="text-secondary">Client ID</td>
+                <td>{{ '****' + config.client_id[-4:] if config.client_id else '(ayarlanmadı)' }}</td></tr>
+            <tr><td class="text-secondary">Cache TTL</td>
+                <td>{{ config.cache_days }} gün</td></tr>
+          </table>
+          <div class="text-secondary" style="font-size:.78rem;line-height:1.5;">
+            Modu değiştirmek için <code>.env</code> dosyasında
+            <code>OB_MODE=mock|sandbox|live</code> ayarlayın.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IBAN Test -->
+    <div class="col-md-7">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header border-secondary fw-semibold">IBAN Test Sorgusı</div>
+        <div class="card-body">
+          <div class="input-group mb-3">
+            <input type="text" id="test-iban" class="form-control bg-dark text-white border-secondary"
+                   placeholder="TR12 0001 0000 0000 0000 00" maxlength="32">
+            <button class="btn btn-outline-primary" type="button" onclick="testIban()">
+              <i class="bi bi-send me-1"></i> Test
+            </button>
+          </div>
+          <div id="test-result" class="d-none">
+            <div class="card bg-black border-secondary">
+              <div class="card-body p-3" style="font-size:.82rem;">
+                <pre id="test-json" class="text-success mb-0" style="white-space:pre-wrap;"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Müşteriye Bağla -->
+  <div class="card bg-dark border-secondary mb-4">
+    <div class="card-header border-secondary fw-semibold">Müşteri IBAN Sorgula & Kaydet</div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('openbanking.sorgula') }}" class="row g-3 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-4">
+          <label class="form-label text-secondary small">Müşteri ID</label>
+          <input type="number" name="customer_id" class="form-control bg-dark text-white border-secondary"
+                 placeholder="1" required>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label text-secondary small">IBAN</label>
+          <input type="text" name="iban" class="form-control bg-dark text-white border-secondary"
+                 placeholder="TR12 0001 0000 0000 0000 00" maxlength="32" required>
+        </div>
+        <div class="col-md-3">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="consent" value="1" id="consent-cb" checked>
+            <label class="form-check-label text-secondary small" for="consent-cb">KVKK Rızası</label>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-cloud-download me-1"></i> Sorgula & Kaydet
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Son Kayıtlar -->
+  {% if recent %}
+  <div class="card bg-dark border-secondary">
+    <div class="card-header border-secondary fw-semibold">Son Sorgular</div>
+    <div class="card-body p-0">
+      <table class="table table-dark table-hover table-sm mb-0 align-middle">
+        <thead class="text-secondary" style="font-size:.8rem;">
+          <tr>
+            <th class="ps-3">IBAN</th>
+            <th>Müşteri</th>
+            <th class="text-end">Ort. Bakiye</th>
+            <th class="text-end">Aylık Giriş</th>
+            <th class="text-center">Düzenlilik</th>
+            <th class="text-center">Overdraft</th>
+            <th>Kaynak</th>
+            <th>Tarih</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in recent %}
+          <tr>
+            <td class="ps-3 font-monospace" style="font-size:.8rem;">{{ r.iban }}</td>
+            <td class="text-secondary">{{ r.customer_id or '—' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(r.avg_monthly_balance or 0) }} ₺</td>
+            <td class="text-end">{{ "{:,.0f}".format(r.avg_monthly_inflow or 0) }} ₺</td>
+            <td class="text-center">
+              <span class="badge
+                {% if (r.cashflow_regularity or 0) >= 0.8 %}bg-success
+                {% elif (r.cashflow_regularity or 0) >= 0.5 %}bg-warning text-dark
+                {% else %}bg-danger{% endif %}">
+                {{ "%.0f"|format((r.cashflow_regularity or 0) * 100) }}%
+              </span>
+            </td>
+            <td class="text-center">
+              {% if r.overdraft_count %}
+                <span class="badge bg-danger">{{ r.overdraft_count }} gün</span>
+              {% else %}<span class="text-secondary">0</span>{% endif %}
+            </td>
+            <td><span class="badge bg-secondary">{{ r.source }}</span></td>
+            <td class="text-secondary" style="font-size:.78rem;">
+              {{ r.fetched_at.strftime('%d.%m.%Y') }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+function testIban() {
+  const iban = document.getElementById('test-iban').value.replace(/\s/g, '');
+  if (!iban) return;
+  fetch('{{ url_for("openbanking.test_sorgu") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded',
+              'X-CSRFToken': '{{ csrf_token() }}'},
+    body: 'iban=' + encodeURIComponent(iban) + '&csrf_token={{ csrf_token() }}'
+  })
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('test-result').classList.remove('d-none');
+    document.getElementById('test-json').textContent = JSON.stringify(d, null, 2);
+  })
+  .catch(e => {
+    document.getElementById('test-result').classList.remove('d-none');
+    document.getElementById('test-json').textContent = 'Hata: ' + e;
+  });
+}
+</script>
+{% endblock %}

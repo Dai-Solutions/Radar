@@ -3,293 +3,245 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Radar 1.0 - {% block title %}{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>{{ app_version }} — {% block title %}Radar{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
     {% block extra_head %}{% endblock %}
-    <style>
-        :root {
-            --primary: #3b82f6;
-            --secondary: #64748b;
-            --dark: #1e293b;
-            --light: #f8fafc;
-            --white: #ffffff;
-            --border: #e2e8f0;
-        }
-        body {
-            background: #f1f5f9;
-            color: var(--dark);
-            font-family: 'Outfit', sans-serif;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        .main-container { padding-top: 2rem; padding-bottom: 5rem; }
-        .glass-card {
-            background: var(--white);
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            border-radius: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-            transition: all 0.3s ease;
-        }
-        .glass-card:hover {
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.07);
-            border-color: rgba(59, 130, 246, 0.2);
-        }
-
-        /* ── NAVBAR ─────────────────────────────────────── */
-        .navbar {
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(15px);
-            border-bottom: 1px solid var(--border);
-            padding: 0.75rem 0;
-            min-height: 64px;
-        }
-        .navbar .container {
-            flex-wrap: nowrap;
-        }
-        .nav-link {
-            color: var(--secondary) !important;
-            font-weight: 600;
-            white-space: nowrap;
-            font-size: 0.85rem;
-            transition: color 0.2s;
-        }
-        .nav-link:hover, .nav-link.active { color: var(--primary) !important; }
-
-        .navbar-brand .logo-container { transition: 0.3s; }
-        .navbar-brand:hover .logo-container { transform: scale(1.05); }
-
-        .user-counter {
-            font-size: 0.75rem;
-            color: #10b981;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 700;
-        }
-
-        .menu-capsule {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: 50px;
-            padding: 4px 12px;
-            display: flex;
-            align-items: center;
-            white-space: nowrap;
-        }
-
-        /* Language pill */
-        .lang-switch-pill {
-            background: #f1f5f9;
-            border: 1px solid var(--border);
-            border-radius: 50px;
-            padding: 4px 12px;
-        }
-        .lang-link {
-            color: #94a3b8;
-            text-decoration: none;
-            font-size: 0.7rem;
-            font-weight: 700;
-        }
-        .lang-link.active { color: var(--dark); }
-
-        .text-glow-info  { color: var(--primary) !important; }
-        .text-glow-danger { color: #ef4444 !important; }
-
-        .btn-primary {
-            background: var(--primary);
-            border: none;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-            transition: 0.3s;
-        }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4); }
-
-        /* Premium Toast */
-        #radarToast {
-            position: fixed; bottom: 30px; right: 30px; z-index: 10002;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px);
-            border: 1px solid var(--border); border-radius: 16px; padding: 16px 24px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            display: flex; align-items: center; gap: 15px;
-            transform: translateY(120%);
-            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        #radarToast.show { transform: translateY(0); }
-        .toast-icon {
-            width: 40px; height: 40px; background: #10b981; color: white;
-            border-radius: 12px; display: flex; align-items: center;
-            justify-content: center; font-size: 1.25rem;
-        }
-
-        {% block extra_style %}{% endblock %}
-    </style>
 </head>
 <body>
 
-    <!-- Feedback Modal -->
-    <div id="feedbackModal" style="display:none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
-        <div class="glass-card" style="margin: 10% auto; padding: 2.5rem; width: 90%; max-width: 450px;">
-            <h3 class="fw-bold mb-2">{{ t['feedback'] }}</h3>
-            <p class="text-muted small mb-4">{{ t['feedback_desc'] }}</p>
-            <textarea id="feedbackText" class="form-control mb-4 bg-light border-0" style="height: 120px; border-radius: 12px;" placeholder="{{ t['msg_placeholder'] }}"></textarea>
-            <div class="d-flex gap-2 justify-content-end">
-                <button onclick="closeFeedbackModal()" class="btn btn-outline-secondary border-0">{{ t['cancel'] }}</button>
-                <button id="submitFeedbackBtn" onclick="submitFeedback()" class="btn btn-primary px-4 fw-bold rounded-pill">{{ t['send'] }}</button>
-            </div>
+<!-- ── NAVBAR ──────────────────────────────────────────────────── -->
+<nav class="navbar sticky-top">
+  <div class="container-fluid container" style="max-width:1280px;">
+
+    <!-- Brand -->
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="Radar" style="height:30px;">
+      <div>
+        <div class="brand-name">{{ app_version }}</div>
+        <div class="brand-sub">{{ t.get('system_tagline','Kredi Risk Platformu') }}</div>
+      </div>
+    </a>
+
+    <!-- Toggler (mobile) -->
+    <button class="navbar-toggler border-0 ms-auto me-2" type="button" data-bs-toggle="collapse" data-bs-target="#radarNav">
+      <i class="bi bi-list fs-4 text-secondary"></i>
+    </button>
+
+    <!-- Nav links -->
+    <div class="collapse navbar-collapse" id="radarNav">
+      <div class="d-flex flex-wrap align-items-center gap-2 ms-auto pt-2 pt-lg-0">
+
+        <!-- User count chip -->
+        {% if total_users is defined %}
+        <span class="user-chip"><i class="bi bi-people-fill"></i>{{ total_users }} kullanıcı</span>
+        {% endif %}
+
+        <!-- Language -->
+        <div class="lang-pill">
+          {% for l in all_langs %}
+            <a href="{{ url_for('main.set_language', lang=l) }}"
+               class="lang-link {{ 'active' if lang == l else '' }}">{{ l | upper }}</a>
+            {% if not loop.last %}<span style="color:var(--border)">|</span>{% endif %}
+          {% endfor %}
         </div>
+
+        <!-- Main menu capsule -->
+        <div class="menu-capsule">
+          <a class="nav-link {{ 'active' if active_page == 'new_customer' else '' }}"
+             href="{{ url_for('customer.new_customer') }}">
+            <i class="bi bi-person-plus me-1"></i>{{ t.get('new_customer','Yeni Müşteri') }}
+          </a>
+          {% if is_admin %}
+          <div class="menu-divider"></div>
+          <a class="nav-link {{ 'active' if active_page == 'import_excel' else '' }}"
+             href="{{ url_for('admin.import_excel') }}">
+            <i class="bi bi-file-earmark-excel me-1"></i>İçe Aktar
+          </a>
+          <div class="menu-divider"></div>
+          <a class="nav-link {{ 'active' if active_page == 'audit_log' else '' }}"
+             href="{{ url_for('admin.audit_log') }}">
+            <i class="bi bi-journal-text me-1"></i>Audit
+          </a>
+          <div class="menu-divider"></div>
+          <a class="nav-link {{ 'active' if active_page == 'sso_config' else '' }}"
+             href="{{ url_for('admin.sso_config') }}">
+            <i class="bi bi-shield-lock me-1"></i>SSO
+          </a>
+          <div class="menu-divider"></div>
+          <a class="nav-link {{ 'active' if active_page == 'ml_panel' else '' }}"
+             href="{{ url_for('ml.panel') }}">
+            <i class="bi bi-cpu me-1"></i>ML
+          </a>
+          <div class="menu-divider"></div>
+          <a class="nav-link {{ 'active' if active_page == 'bddk' else '' }}"
+             href="{{ url_for('bddk.panel') }}">
+            <i class="bi bi-file-earmark-ruled me-1"></i>BDDK
+          </a>
+          <div class="menu-divider"></div>
+          <a class="nav-link {{ 'active' if active_page == 'openbanking' else '' }}"
+             href="{{ url_for('openbanking.panel') }}">
+            <i class="bi bi-bank me-1"></i>OB
+          </a>
+          {% endif %}
+        </div>
+
+        <!-- Portföy -->
+        <a class="nav-link {{ 'active' if active_page == 'portfolio' else '' }}"
+           href="{{ url_for('portfolio.index') }}">
+          <i class="bi bi-bar-chart-steps me-1"></i>Portföy
+        </a>
+
+        <!-- Güvenlik -->
+        <a class="nav-link" href="{{ url_for('main.guvenlik') }}">
+          <i class="bi bi-shield-check me-1"></i>{{ t.get('security','Güvenlik') }}
+        </a>
+
+        <div class="divider d-none d-lg-block"></div>
+
+        <!-- 2FA + Logout -->
+        <a class="nav-link" href="{{ url_for('auth.totp_setup') }}" title="İki Faktörlü Doğrulama">
+          <i class="bi bi-shield-lock"></i>
+        </a>
+        <span class="text-muted d-none d-xl-inline" style="font-size:.75rem;">{{ current_user.email }}</span>
+        <a class="nav-link" href="{{ url_for('auth.logout') }}" title="Çıkış" style="color:var(--red)!important;">
+          <i class="bi bi-box-arrow-right"></i>
+        </a>
+
+      </div>
     </div>
+  </div>
+</nav>
+<!-- ── END NAVBAR ──────────────────────────────────────────────── -->
 
-    <!-- Global Toast -->
-    <div id="radarToast">
-        <div class="toast-icon"><i class="bi bi-check-lg"></i></div>
-        <div>
-            <h6 class="fw-bold mb-0 text-dark" id="toastTitle">Teşekkür Ederiz!</h6>
-            <p class="small text-muted mb-0" id="toastMsg">Geri bildiriminiz başarıyla iletildi.</p>
-        </div>
+<!-- ── FEEDBACK MODAL ─────────────────────────────────────────── -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);backdrop-filter:blur(4px);">
+  <div class="card" style="margin:8% auto;padding:2rem;width:90%;max-width:440px;">
+    <h5 class="fw-bold mb-1">{{ t.get('feedback','Geri Bildirim') }}</h5>
+    <p class="text-muted small mb-3">{{ t.get('feedback_desc','Görüşlerinizi paylaşın.') }}</p>
+    <textarea id="feedbackText" class="form-control mb-3" rows="4"
+              placeholder="{{ t.get('msg_placeholder','Mesajınız...') }}"></textarea>
+    <div class="d-flex gap-2 justify-content-end">
+      <button onclick="closeFeedbackModal()" class="btn btn-secondary">{{ t.get('cancel','İptal') }}</button>
+      <button id="submitFeedbackBtn" onclick="submitFeedback()" class="btn btn-primary">{{ t.get('send','Gönder') }}</button>
     </div>
+  </div>
+</div>
 
-    <!-- ── NAVBAR ─────────────────────────────────────────── -->
-    <nav class="navbar navbar-expand-lg sticky-top shadow-sm">
-        <div class="container">
-            <a class="navbar-brand d-flex flex-column" href="{{ url_for('main.index') }}">
-                <div class="d-flex align-items-center">
-                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="38" class="me-2">
-                    <span class="fw-bold h5 mb-0 text-dark">Radar <small class="text-secondary fw-normal">1.0</small></span>
-                </div>
-                <span class="text-secondary fw-bold text-uppercase" style="font-size: 0.6rem; margin-top: -2px; letter-spacing: 0.5px;">{{ t['system_tagline'] }}</span>
-            </a>
+<!-- ── TOAST ───────────────────────────────────────────────────── -->
+<div id="radarToast">
+  <div class="toast-icon"><i class="bi bi-check-lg"></i></div>
+  <div>
+    <div class="fw-semibold text-dark" id="toastTitle" style="font-size:.85rem;">Başarılı</div>
+    <div class="text-muted" id="toastMsg" style="font-size:.78rem;"></div>
+  </div>
+</div>
 
-            <button class="navbar-toggler border-0 ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#radarNav" aria-controls="radarNav" aria-expanded="false">
-                <i class="bi bi-list text-dark fs-2"></i>
-            </button>
+<!-- ── GUIDE HELP BUTTON ───────────────────────────────────────── -->
+<button class="guide-help-btn" id="guideHelpBtn" onclick="showGuide()" title="Sayfa rehberini aç">
+  <i class="bi bi-question-lg"></i>
+</button>
 
-            <div class="collapse navbar-collapse" id="radarNav">
-                <div class="navbar-nav ms-auto align-items-center gap-3 pt-2 pt-lg-0">
+<!-- ── MAIN CONTENT ────────────────────────────────────────────── -->
+<div class="page-wrapper">
 
-                    <!-- User count -->
-                    {% if total_users is defined %}
-                    <div class="user-counter d-none d-lg-flex align-items-center bg-light px-2 py-1 rounded-pill border border-secondary border-opacity-10" style="white-space: nowrap;">
-                        <i class="bi bi-person-fill me-1"></i>
-                        <span class="fw-bold">{{ total_users }}</span>
-                    </div>
-                    {% endif %}
+  <!-- Guide panel (her sayfada doldurulur) -->
+  {% set guide_content %}{% block page_guide %}{% endblock %}{% endset %}
+  {% if guide_content | trim %}
+  <div class="guide-panel" id="guidePanel">
+    <div class="guide-icon"><i class="bi bi-lightbulb-fill"></i></div>
+    <div class="guide-body">{{ guide_content | safe }}</div>
+    <button class="guide-close" onclick="dismissGuide()" title="Kapat">&times;</button>
+  </div>
+  {% endif %}
 
-                    <!-- Language switch -->
-                    <div class="lang-switch-pill d-flex align-items-center">
-                        <a href="{{ url_for('main.set_language', lang='tr') }}" class="lang-link px-2 {{ 'active' if lang == 'tr' else '' }}">TR</a>
-                        <span class="text-muted opacity-50 small">|</span>
-                        <a href="{{ url_for('main.set_language', lang='en') }}" class="lang-link px-2 {{ 'active' if lang == 'en' else '' }}">EN</a>
-                        <span class="text-muted opacity-50 small">|</span>
-                        <a href="{{ url_for('main.set_language', lang='es') }}" class="lang-link px-2 {{ 'active' if lang == 'es' else '' }}">ES</a>
-                        <span class="text-muted opacity-50 small">|</span>
-                        <a href="{{ url_for('main.set_language', lang='de') }}" class="lang-link px-2 {{ 'active' if lang == 'de' else '' }}">DE</a>
-                    </div>
+  {% block content %}{% endblock %}
+</div>
 
-                    <!-- Feedback -->
-                    <a class="nav-link" href="#" onclick="openFeedbackModal(); return false;">
-                        <i class="bi bi-chat-dots me-1"></i>{{ t['feedback'] | upper }}
-                    </a>
+<!-- ── FOOTER ──────────────────────────────────────────────────── -->
+<footer>
+  <div style="max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem;">
+    <span>© 2026 {{ app_version }} — Void Ecosystem</span>
+    <div class="d-flex align-items-center gap-2">
+      <a href="#" onclick="openFeedbackModal();return false;" class="sponsor-link" style="font-size:.78rem;">
+        <i class="bi bi-chat-dots me-1"></i>{{ t.get('feedback','Geri Bildirim') }}
+      </a>
+      <span style="color:var(--border)">·</span>
+      <i class="bi bi-heart-fill text-danger" style="animation:pulse-heart 1.6s ease-in-out infinite;font-size:.75rem;"></i>
+      <a href="https://opencollective.com/dynamicai" target="_blank" class="sponsor-link" style="font-size:.78rem;">OpenCollective</a>
+      <span style="color:var(--border)">·</span>
+      <a href="https://www.patreon.com/c/DynamicAI" target="_blank" class="sponsor-link" style="font-size:.78rem;">Patreon</a>
+    </div>
+  </div>
+</footer>
 
-                    <!-- Main menu capsule -->
-                    <div class="menu-capsule gap-1">
-                        <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'new_customer' else '' }}"
-                           href="{{ url_for('customer.new_customer') }}">{{ t['new_customer'] | upper }}</a>
-                        {% if is_admin %}
-                        <span class="text-muted opacity-25">|</span>
-                        <a class="nav-link px-2 py-1 fw-bold {{ 'active' if active_page == 'import_excel' else '' }}"
-                           href="{{ url_for('admin.import_excel') }}">{{ t['import_excel'] | upper }}</a>
-                        {% endif %}
-                    </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const langT = {{ t | tojson }};
 
-                    <!-- Security + Sponsor -->
-                    <div class="d-flex align-items-center">
-                        <a class="nav-link text-glow-info d-flex align-items-center" href="{{ url_for('main.guvenlik') }}">
-                            <i class="bi bi-shield-fill-check fs-5 me-1"></i>
-                            <span class="fw-bold" style="font-size: 0.75rem;">{{ t['security'] | upper }}</span>
-                        </a>
-                    </div>
+/* ── Feedback ─────────────────────────────────── */
+function openFeedbackModal()  { document.getElementById('feedbackModal').style.display='block'; }
+function closeFeedbackModal() { document.getElementById('feedbackModal').style.display='none'; }
 
-                    <div class="vr bg-secondary opacity-25 d-none d-lg-block mx-1" style="height: 20px;"></div>
+function showToast(title, msg, ok=true) {
+    const t = document.getElementById('radarToast');
+    const icon = t.querySelector('.toast-icon');
+    document.getElementById('toastTitle').textContent = title;
+    document.getElementById('toastMsg').textContent   = msg;
+    icon.style.background = ok ? 'var(--green)' : 'var(--red)';
+    icon.innerHTML = ok ? '<i class="bi bi-check-lg"></i>' : '<i class="bi bi-x-lg"></i>';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+}
 
-                    <!-- User email + logout -->
-                    <span class="navbar-text small fw-bold text-primary px-1 d-none d-xl-inline">{{ current_user.email }}</span>
-                    <a class="nav-link text-danger fw-bold" href="{{ url_for('auth.logout') }}">
-                        <i class="bi bi-box-arrow-right fs-5"></i>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </nav>
-    <!-- ── END NAVBAR ─────────────────────────────────────── -->
+function submitFeedback() {
+    const msg = document.getElementById('feedbackText').value.trim();
+    const btn = document.getElementById('submitFeedbackBtn');
+    if (!msg) { alert(langT['msg_empty_alert'] || 'Lütfen bir mesaj yazın.'); return; }
+    btn.disabled = true; btn.textContent = langT['msg_sending'] || 'Gönderiliyor...';
+    fetch('{{ url_for('admin.submit_feedback') }}', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ message: msg })
+    })
+    .then(r=>r.json())
+    .then(d => {
+        if (d.status === 'success') {
+            showToast('Teşekkürler!', 'Geri bildiriminiz iletildi.');
+            closeFeedbackModal();
+            document.getElementById('feedbackText').value = '';
+        } else { showToast('Hata', d.message || 'Bir sorun oluştu.', false); }
+    })
+    .catch(() => showToast('Hata', 'Bağlantı sorunu.', false))
+    .finally(() => { btn.disabled=false; btn.textContent=langT['send']||'Gönder'; });
+}
 
-    {% block content %}{% endblock %}
+/* ── Guide (eğitim) sistemi ──────────────────── */
+(function() {
+    const panel   = document.getElementById('guidePanel');
+    const helpBtn = document.getElementById('guideHelpBtn');
+    if (!panel) return;
 
-    <!-- ── FOOTER ─────────────────────────────────────────── -->
-    <footer class="mt-5 py-4 border-top border-secondary border-opacity-25">
-        <div class="container d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
-            <div class="text-muted small text-center text-md-start">
-                © 2026 {{ app_version }} — Void Ecosystem
-            </div>
-            <div class="sponsor-pill d-inline-flex align-items-center"
-                 style="gap: 8px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 999px; font-size: 0.85rem; background: rgba(255,255,255,0.02);">
-                <i class="bi bi-heart-fill text-danger" style="animation: pulse-heart 1.6s ease-in-out infinite;"></i>
-                <span class="text-muted fw-bold" style="letter-spacing: 0.5px;">SPONSOR:</span>
-                <a href="https://opencollective.com/dynamicai#category-CONNECT" target="_blank"
-                   class="sponsor-link text-decoration-none fw-semibold" style="color: #ff5e6c;">OpenCollective</a>
-                <span class="text-muted opacity-50">·</span>
-                <a href="https://www.patreon.com/c/DynamicAI" target="_blank"
-                   class="sponsor-link text-decoration-none fw-semibold" style="color: #ff8a3d;">Patreon</a>
-            </div>
-        </div>
-    </footer>
-    <style>
-        @keyframes pulse-heart {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.25); }
-        }
-        .sponsor-link { transition: filter .15s ease, transform .15s ease; }
-        .sponsor-link:hover { filter: brightness(1.3); transform: translateY(-1px); }
-    </style>
-    <!-- ── END FOOTER ─────────────────────────────────────── -->
+    const pageKey = 'guide_dismissed_' + location.pathname.replace(/\//g,'_');
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const langT = {{ t | tojson }};
+    if (localStorage.getItem(pageKey) === '1') {
+        panel.style.display = 'none';
+        if (helpBtn) helpBtn.classList.add('visible');
+    }
 
-        function openFeedbackModal()  { document.getElementById('feedbackModal').style.display = 'block'; }
-        function closeFeedbackModal() { document.getElementById('feedbackModal').style.display = 'none';  }
+    window.dismissGuide = function() {
+        panel.style.display = 'none';
+        localStorage.setItem(pageKey, '1');
+        if (helpBtn) helpBtn.classList.add('visible');
+    };
 
-        function showToast(title, msg) {
-            const toast = document.getElementById('radarToast');
-            document.getElementById('toastTitle').innerText = title;
-            document.getElementById('toastMsg').innerText   = msg;
-            toast.classList.add('show');
-            setTimeout(() => { toast.classList.remove('show'); }, 4000);
-        }
-
-        function submitFeedback() {
-            const message = document.getElementById('feedbackText').value;
-            const btn = document.getElementById('submitFeedbackBtn');
-            if (!message) { alert(langT['msg_empty_alert']); return; }
-            btn.disabled = true; btn.innerText = langT['msg_sending'];
-            fetch('{{ url_for('admin.submit_feedback') }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: message })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    showToast("Harika!", "Fikirleriniz bizim için çok değerli, teşekkür ederiz.");
-                    closeFeedbackModal();
-                    document.getElementById('feedbackText').value = '';
-                } else { alert(langT['msg_error_prefix'] + data.message); }
-            })
-            .catch(err => { console.error(err); alert(langT['msg_generic_error']); })
-            .finally(() => { btn.disabled = false; btn.innerText = langT['send']; });
-        }
-    </script>
-    {% block extra_scripts %}{% endblock %}
+    window.showGuide = function() {
+        panel.style.display = 'flex';
+        localStorage.removeItem(pageKey);
+        if (helpBtn) helpBtn.classList.remove('visible');
+    };
+})();
+</script>
+{% block extra_scripts %}{% endblock %}
 </body>
 </html>
