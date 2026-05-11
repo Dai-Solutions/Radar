@@ -2,6 +2,17 @@
 
 {% block title %}{{ t['report_title'] }}{% endblock %}
 
+{% block page_guide %}
+<div class="guide-title"><i class="bi bi-file-earmark-bar-graph me-1"></i>Kredi Skoru Raporu</div>
+<p class="guide-text">Bu sayfa, seçili müşteri için hesaplanan kredi skorunu, IFRS 9 aşamasını ve Basel III sermaye gereksinimini gösterir.</p>
+<ul class="guide-steps">
+  <li><strong>Kredi Notu (A/B/C)</strong>: Genel risk sınıfı — A düşük, C yüksek risk.</li>
+  <li><strong>IFRS 9 Aşaması</strong>: 1 = Normal, 2 = İzleme, 3 = Temerrüt.</li>
+  <li><strong>ECL</strong>: Beklenen kredi kaybı tutarı (TL).</li>
+  <li>Raporu PDF olarak yazdırmak için tarayıcının yazdır (Ctrl+P) özelliğini kullanın.</li>
+</ul>
+{% endblock %}
+
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
@@ -207,6 +218,179 @@
                 </div>
             </div>
         </div>
+
+        <!-- ═══ IFRS 9 / BASEL III PANELİ ═══ -->
+        {% if sonuc.ifrs9_stage %}
+        <div class="glass-card overflow-hidden border-0 shadow-sm mb-5">
+            <div class="p-3 d-flex align-items-center gap-2 border-bottom"
+                 style="background:linear-gradient(135deg,{% if sonuc.ifrs9_stage == 1 %}#064e3b,#065f46{% elif sonuc.ifrs9_stage == 2 %}#78350f,#92400e{% else %}#7f1d1d,#991b1b{% endif %});">
+                <div style="width:7px;height:7px;border-radius:50%;background:{% if sonuc.ifrs9_stage == 1 %}#34d399{% elif sonuc.ifrs9_stage == 2 %}#fbbf24{% else %}#f87171{% endif %};box-shadow:0 0 6px currentColor;"></div>
+                <span class="text-white fw-bold small text-uppercase" style="letter-spacing:1.5px;">IFRS 9 / Basel III — Kredi Risk Ölçümü</span>
+                <span class="ms-auto badge rounded-pill fw-bold px-3 py-2
+                    {% if sonuc.ifrs9_stage == 1 %}bg-success{% elif sonuc.ifrs9_stage == 2 %}bg-warning text-dark{% else %}bg-danger{% endif %}"
+                    style="font-size:0.7rem;">
+                    AŞAMA {{ sonuc.ifrs9_stage }}
+                    {% if sonuc.ifrs9_stage == 1 %} — İyi Performans
+                    {% elif sonuc.ifrs9_stage == 2 %} — Artan Risk (SICR)
+                    {% else %} — Değer Düşüklüğü{% endif %}
+                </span>
+            </div>
+            <div class="p-4">
+                <!-- Aşama gerekçesi -->
+                {% if sonuc.ifrs9_stage >= 2 %}
+                <div class="alert border-0 rounded-3 mb-4 d-flex align-items-start gap-2 py-2 px-3
+                    {{ 'alert-warning' if sonuc.ifrs9_stage == 2 else 'alert-danger' }}" style="font-size:0.8rem;">
+                    <i class="bi bi-info-circle-fill mt-1 flex-shrink-0"></i>
+                    <span>{{ sonuc.ifrs9_stage_reason if sonuc.ifrs9_stage_reason else '—' }}</span>
+                </div>
+                {% endif %}
+
+                <!-- Ana metrikler -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md col-6">
+                        <div class="p-3 rounded-3 border text-center" style="background:#f8fafc;">
+                            <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.58rem;letter-spacing:1px;">PD (Temerrüt Olas.)</div>
+                            <div class="fw-bold fs-5 {{ 'text-success' if (sonuc.ifrs9_pd or 0) < 0.05 else ('text-warning' if (sonuc.ifrs9_pd or 0) < 0.12 else 'text-danger') }}">
+                                %{{ ((sonuc.ifrs9_pd or 0) * 100) | round(2) }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md col-6">
+                        <div class="p-3 rounded-3 border text-center" style="background:#f8fafc;">
+                            <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.58rem;letter-spacing:1px;">LGD (Kayıp Oranı)</div>
+                            <div class="fw-bold fs-5 text-dark">%{{ ((sonuc.ifrs9_lgd or 0) * 100) | round(1) }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md col-6">
+                        <div class="p-3 rounded-3 border text-center" style="background:#f8fafc;">
+                            <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.58rem;letter-spacing:1px;">EAD (Maruz Kalım)</div>
+                            <div class="fw-bold" style="font-size:0.95rem;">{{ "{:,.0f}".format(sonuc.ifrs9_ead or 0) }}</div>
+                            <div class="text-muted small">TRY</div>
+                        </div>
+                    </div>
+                    <div class="col-md col-6">
+                        <div class="p-3 rounded-3 border text-center {{ 'border-warning' if sonuc.ifrs9_stage == 2 else ('border-danger' if sonuc.ifrs9_stage == 3 else '') }}" style="background:#f8fafc;">
+                            <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.58rem;letter-spacing:1px;">ECL (Beklenen Zarar)</div>
+                            <div class="fw-bold {{ 'text-success' if (sonuc.ifrs9_ecl or 0) < 10000 else ('text-warning' if (sonuc.ifrs9_ecl or 0) < 100000 else 'text-danger') }}" style="font-size:0.95rem;">
+                                {{ "{:,.0f}".format(sonuc.ifrs9_ecl or 0) }}
+                            </div>
+                            <div class="text-muted small">TRY · {% if sonuc.ifrs9_stage == 1 %}12 ay{% else %}Ömür boyu{% endif %}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Basel III -->
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="p-3 rounded-3 border" style="background:#f8fafc;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted fw-bold text-uppercase small" style="font-size:0.6rem;letter-spacing:1px;">Risk Ağırlıklı Varlık (RWA)</span>
+                                <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill small fw-bold">Basel III IRB</span>
+                            </div>
+                            <div class="fw-bold fs-5 text-dark">{{ "{:,.0f}".format(sonuc.ifrs9_rwa or 0) }} <span class="text-muted small fw-normal">TRY</span></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 rounded-3 border {{ 'border-danger border-2' if (sonuc.ifrs9_capital_req or 0) > 0 else '' }}" style="background:#f8fafc;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted fw-bold text-uppercase small" style="font-size:0.6rem;letter-spacing:1px;">Pillar 1 Sermaye (%8)</span>
+                                <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill small fw-bold">BDDK</span>
+                            </div>
+                            <div class="fw-bold fs-5 text-danger">{{ "{:,.0f}".format(sonuc.ifrs9_capital_req or 0) }} <span class="text-muted small fw-normal">TRY</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ═══ KKB PANELİ ═══ -->
+        {% if sonuc.kkb_veto %}
+        <div class="d-flex align-items-start gap-3 p-4 mb-5 rounded-4 shadow-sm"
+             style="background:#fef2f2; border: 2px solid #ef4444;">
+            <i class="bi bi-x-octagon-fill text-danger fs-3 mt-1 flex-shrink-0"></i>
+            <div>
+                <h5 class="fw-bold text-danger mb-1">KKB HARD VETO — Kredi Onaylanamaz</h5>
+                <p class="mb-0 text-danger opacity-75 small">{{ sonuc.decision_summary }}</p>
+            </div>
+        </div>
+        {% elif kkb_report %}
+        <div class="glass-card overflow-hidden border-0 shadow-sm mb-5">
+            <div class="p-3 d-flex align-items-center gap-2 border-bottom" style="background:linear-gradient(135deg,#1e293b,#334155);">
+                <div style="width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981;"></div>
+                <span class="text-white fw-bold small text-uppercase" style="letter-spacing:1.5px;">KKB Kurumsal Risk Raporu</span>
+                <span class="ms-auto text-white opacity-25 small">{{ kkb_report.fetched_at.strftime('%d/%m/%Y') if kkb_report.fetched_at else '' }} · {{ kkb_report.source | upper }}</span>
+                {% if sonuc.kkb_enriched %}
+                <span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-25 rounded-pill small fw-bold ms-1">
+                    <i class="bi bi-stars me-1"></i>Ağırlıklandırma Aktif
+                </span>
+                {% endif %}
+            </div>
+            <div class="p-4">
+                <div class="row g-3">
+                    <div class="col-md-2 col-6">
+                        <div class="text-center">
+                            <div class="text-muted small fw-bold text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">KKB Skoru</div>
+                            <div class="fw-bold fs-4 {{ 'text-success' if (kkb_report.kkb_score or 0) >= 1400 else ('text-warning' if (kkb_report.kkb_score or 0) >= 900 else 'text-danger') }}">
+                                {{ kkb_report.kkb_score or '—' }}
+                            </div>
+                            {% if kkb_report.kkb_grade %}
+                            <span class="badge rounded-pill {{ 'bg-success' if kkb_report.kkb_grade == 'A' else ('bg-warning text-dark' if kkb_report.kkb_grade == 'B' else 'bg-danger') }}">
+                                {{ kkb_report.kkb_grade }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="text-center">
+                            <div class="text-muted small fw-bold text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Toplam Maruz Kalım</div>
+                            <div class="fw-bold">{{ "{:,.0f}".format(kkb_report.total_bank_exposure or 0) }} <span class="text-muted small">TRY</span></div>
+                            <div class="text-muted small">Tüm bankalar konsolide</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6">
+                        <div class="text-center">
+                            <div class="text-muted small fw-bold text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">En Uzun Gecikme</div>
+                            <div class="fw-bold fs-5 {{ 'text-danger' if (kkb_report.max_days_past_due or 0) > 30 else ('text-warning' if (kkb_report.max_days_past_due or 0) > 0 else 'text-success') }}">
+                                {{ kkb_report.max_days_past_due or 0 }} <span class="text-muted small">gün</span>
+                            </div>
+                            <div class="text-muted small">{{ kkb_report.num_late_payments or 0 }} gecikme / 12ay</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6">
+                        <div class="text-center">
+                            <div class="text-muted small fw-bold text-uppercase mb-1" style="font-size:0.6rem;letter-spacing:1px;">Takipteki Alacak</div>
+                            <div class="fw-bold {{ 'text-danger' if (kkb_report.npl_amount or 0) > 0 else 'text-success' }}">
+                                {{ "{:,.0f}".format(kkb_report.npl_amount or 0) }} <span class="text-muted small">TRY</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-12">
+                        <div class="d-flex flex-column gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi {{ 'bi-check-circle-fill text-success' if not kkb_report.has_bounced_check else 'bi-x-circle-fill text-danger' }}"></i>
+                                <span class="small fw-bold {{ 'text-success' if not kkb_report.has_bounced_check else 'text-danger' }}">
+                                    Karşılıksız Çek {{ '— Temiz' if not kkb_report.has_bounced_check else '— Kayıt Mevcut' }}
+                                </span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi {{ 'bi-check-circle-fill text-success' if not kkb_report.active_enforcement else 'bi-x-circle-fill text-danger' }}"></i>
+                                <span class="small fw-bold {{ 'text-success' if not kkb_report.active_enforcement else 'text-danger' }}">
+                                    İcra Takibi {{ '— Yok' if not kkb_report.active_enforcement else '— Aktif' }}
+                                </span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi {{ 'bi-check-circle-fill text-success' if not kkb_report.npl_flag else 'bi-x-circle-fill text-danger' }}"></i>
+                                <span class="small fw-bold {{ 'text-success' if not kkb_report.npl_flag else 'text-danger' }}">
+                                    NPL {{ '— Temiz' if not kkb_report.npl_flag else '— Takipte' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="executive-summary mb-5 shadow-sm">
             <h5 class="fw-bold text-dark mb-3 d-flex align-items-center">

@@ -5,7 +5,8 @@ from functools import wraps
 import json
 import time
 
-from database import get_session, Customer, AgingRecord as AgingRecordDB, CreditRequest, CreditScore
+from datetime import datetime
+from database import get_session, Customer, AgingRecord as AgingRecordDB, CreditRequest, CreditScore, KKBReport
 from aging_analyzer import AgingAnalyzer, AgingRecord
 from credit_scoring import CreditScorer, CreditRequestInput, ScenarioResult
 from routes.admin import get_settings
@@ -76,7 +77,15 @@ def credit_request():
         for r in calc_records:
             r.type = 'past' if r.type in ['TL', 'past', 'TL_past'] else r.type
 
-        scorer = CreditScorer(customer_id, db_session=db_session)
+        kkb_report = (
+            db_session.query(KKBReport)
+            .filter(KKBReport.customer_id == customer_id,
+                    KKBReport.expires_at > datetime.utcnow())
+            .order_by(KKBReport.fetched_at.desc())
+            .first()
+        )
+
+        scorer = CreditScorer(customer_id, db_session=db_session, kkb_report=kkb_report)
         lang = flask_session.get('lang', 'tr')
 
         req_input = CreditRequestInput(request_amount=float(amount), currency=currency)
@@ -111,6 +120,15 @@ def credit_request():
             dscr_score=res.dscr_score, volatility=res.volatility,
             piotroski_score=res.piotroski_score, piotroski_grade=res.piotroski_grade,
             icr_score=res.icr_score, aging_concentration=res.aging_concentration,
+            kkb_veto=getattr(res, 'kkb_veto', None),
+            kkb_enriched=getattr(res, 'kkb_enriched', False),
+            ifrs9_stage=getattr(res, 'ifrs9_stage', None),
+            ifrs9_pd=getattr(res, 'ifrs9_pd', None),
+            ifrs9_lgd=getattr(res, 'ifrs9_lgd', None),
+            ifrs9_ead=getattr(res, 'ifrs9_ead', None),
+            ifrs9_ecl=getattr(res, 'ifrs9_ecl', None),
+            ifrs9_rwa=getattr(res, 'ifrs9_rwa', None),
+            ifrs9_capital_req=getattr(res, 'ifrs9_capital_req', None),
         )
         db_session.add(score_db)
         db_session.commit()
@@ -144,6 +162,14 @@ def report_view(talep_id):
             return "Yetkisiz erişim", 403
 
         talep = db_session.query(CreditRequest).filter(CreditRequest.id == talep_id).first()
+
+        kkb_report = (
+            db_session.query(KKBReport)
+            .filter(KKBReport.customer_id == skor.customer_id,
+                    KKBReport.expires_at > datetime.utcnow())
+            .order_by(KKBReport.fetched_at.desc())
+            .first()
+        )
 
         # Senaryoları DB'den oku — Monte Carlo'yu rapor açılışında yeniden çalıştırmıyoruz
         scenarios = []
@@ -193,8 +219,18 @@ def report_view(talep_id):
                 self.piotroski_grade = getattr(s, 'piotroski_grade', '') or ''
                 self.icr_score = getattr(s, 'icr_score', 0.0) or 0.0
                 self.aging_concentration = getattr(s, 'aging_concentration', 0.0) or 0.0
+                self.kkb_veto = getattr(s, 'kkb_veto', None)
+                self.kkb_enriched = getattr(s, 'kkb_enriched', False) or False
+                self.ifrs9_stage = getattr(s, 'ifrs9_stage', 0) or 0
+                self.ifrs9_pd = getattr(s, 'ifrs9_pd', 0.0) or 0.0
+                self.ifrs9_lgd = getattr(s, 'ifrs9_lgd', 0.0) or 0.0
+                self.ifrs9_ead = getattr(s, 'ifrs9_ead', 0.0) or 0.0
+                self.ifrs9_ecl = getattr(s, 'ifrs9_ecl', 0.0) or 0.0
+                self.ifrs9_rwa = getattr(s, 'ifrs9_rwa', 0.0) or 0.0
+                self.ifrs9_capital_req = getattr(s, 'ifrs9_capital_req', 0.0) or 0.0
 
         sonuc = ResultWrapper(skor, scenarios)
-        return render_template('rapor.html', musteri=customer, talep=talep, skor=skor, sonuc=sonuc)
+        return render_template('rapor.html', musteri=customer, talep=talep, skor=skor,
+                               sonuc=sonuc, kkb_report=kkb_report)
     finally:
         db_session.close()
