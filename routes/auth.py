@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify, Response
 from flask_login import login_user, logout_user, current_user, UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
@@ -11,7 +11,7 @@ from security_extensions import limiter
 # NOTE: `ts` (URLSafeTimedSerializer) is NOT imported here — it's None at module
 # import time and only gets set inside init_extensions(). All callsites use
 # `from extensions import ts as _ts` locally to capture the live value.
-from database import get_session, User, Feedback
+from database import get_session, User, Feedback, SSOConfig
 from translations import translations
 
 auth_bp = Blueprint('auth', __name__)
@@ -96,18 +96,29 @@ def admin_required(f):
         return f(*args, **kwargs)
     return wrapper
 
+def _get_active_sso(db_session, tenant_id: int = 1):
+    """Tenant için aktif SSOConfig'i döndürür; yoksa None."""
+    return db_session.query(SSOConfig).filter(
+        SSOConfig.tenant_id == tenant_id,
+        SSOConfig.is_active == True,
+    ).first()
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute; 50 per hour", methods=['POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
-    
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
-        password = request.form.get('password')
 
-        db_session = get_session()
-        try:
+    db_session = get_session()
+    try:
+        sso = _get_active_sso(db_session)
+        sso_type = sso.provider_type if sso else None
+
+        if request.method == 'POST':
+            email = request.form.get('email', '').strip().lower()
+            password = request.form.get('password')
+
             user = db_session.query(User).filter(User.email == email).first()
 
             if user and user.password_hash and check_password_hash(user.password_hash, password):
@@ -115,15 +126,19 @@ def login():
                     flash('Lütfen hesabınızı e-postanıza gönderdiğimiz onay maili ile doğrulayın.', 'error')
                     return redirect(url_for('auth.login'))
 
+                if getattr(user, 'totp_enabled', False):
+                    session['_2fa_user_id'] = user.id
+                    return redirect(url_for('auth.totp_verify'))
+
                 login_user(UserWrapper(user))
                 flash(f'Hoş geldiniz, {user.full_name or email}', 'success')
                 return redirect(url_for('main.index'))
 
             flash('Geçersiz e-posta veya şifre.', 'error')
-        finally:
-            db_session.close()
 
-    return render_template('login.html')
+        return render_template('login.html', sso_type=sso_type)
+    finally:
+        db_session.close()
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 @limiter.limit("5 per minute; 20 per hour", methods=['POST'])
@@ -252,3 +267,287 @@ def authorize():
 def logout():
     logout_user()
     return redirect(url_for('auth.login'))
+
+
+# ──────────────────────────────────────────────────────────────
+# 2FA / TOTP Routes
+# ──────────────────────────────────────────────────────────────
+
+@auth_bp.route('/2fa/setup', methods=['GET'])
+def totp_setup():
+    """Kullanıcıya QR kodu ve manuel gizli anahtarı göster."""
+    from flask_login import current_user as cu
+    if not cu.is_authenticated:
+        return redirect(url_for('auth.login'))
+
+    import pyotp, qrcode, io, base64
+    db_session = get_session()
+    try:
+        user = db_session.query(User).filter(User.id == cu.id).first()
+        if not user:
+            return redirect(url_for('main.index'))
+
+        # Yeni kurulum veya mevcut secret'ı göster (henüz etkin değilse her seferinde yeni secret)
+        if not user.totp_secret or not getattr(user, 'totp_enabled', False):
+            user.totp_secret = pyotp.random_base32()
+            db_session.commit()
+
+        totp = pyotp.TOTP(user.totp_secret)
+        app_name = current_app.config.get('APP_VERSION', 'Radar')
+        provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name=app_name)
+
+        img = qrcode.make(provisioning_uri)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        return render_template(
+            '2fa_setup.html',
+            qr_data=qr_b64,
+            secret=user.totp_secret,
+            already_enabled=bool(getattr(user, 'totp_enabled', False)),
+        )
+    finally:
+        db_session.close()
+
+
+@auth_bp.route('/2fa/setup/confirm', methods=['POST'])
+def totp_setup_confirm():
+    """TOTP kodunu doğrula ve 2FA'yı etkinleştir."""
+    from flask_login import current_user as cu
+    if not cu.is_authenticated:
+        return redirect(url_for('auth.login'))
+
+    import pyotp
+    code = request.form.get('code', '').strip().replace(' ', '')
+
+    db_session = get_session()
+    try:
+        user = db_session.query(User).filter(User.id == cu.id).first()
+        if not user or not user.totp_secret:
+            flash('Kurulum verisi bulunamadı. Yeniden başlatın.', 'error')
+            return redirect(url_for('auth.totp_setup'))
+
+        totp = pyotp.TOTP(user.totp_secret)
+        if totp.verify(code, valid_window=1):
+            user.totp_enabled = True
+            db_session.commit()
+            flash('İki faktörlü doğrulama başarıyla etkinleştirildi.', 'success')
+            return redirect(url_for('main.index'))
+        else:
+            flash('Geçersiz kod. Uygulamanızdaki kodu kontrol edin ve tekrar deneyin.', 'error')
+            return redirect(url_for('auth.totp_setup'))
+    finally:
+        db_session.close()
+
+
+@auth_bp.route('/2fa/disable', methods=['POST'])
+def totp_disable():
+    """2FA'yı devre dışı bırak (şifre doğrulaması ile)."""
+    from flask_login import current_user as cu
+    if not cu.is_authenticated:
+        return redirect(url_for('auth.login'))
+
+    password = request.form.get('password', '')
+    db_session = get_session()
+    try:
+        user = db_session.query(User).filter(User.id == cu.id).first()
+        if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
+            flash('Şifre hatalı. 2FA devre dışı bırakılamadı.', 'error')
+            return redirect(url_for('auth.totp_setup'))
+
+        user.totp_enabled = False
+        user.totp_secret = None
+        db_session.commit()
+        flash('İki faktörlü doğrulama devre dışı bırakıldı.', 'success')
+        return redirect(url_for('main.index'))
+    finally:
+        db_session.close()
+
+
+@auth_bp.route('/2fa/verify', methods=['GET', 'POST'])
+def totp_verify():
+    """Login sonrası TOTP doğrulama adımı."""
+    user_id = session.get('_2fa_user_id')
+    if not user_id:
+        return redirect(url_for('auth.login'))
+
+    if request.method == 'POST':
+        import pyotp
+        code = request.form.get('code', '').strip().replace(' ', '')
+
+        db_session = get_session()
+        try:
+            user = db_session.query(User).filter(User.id == user_id).first()
+            if not user or not user.totp_secret:
+                session.pop('_2fa_user_id', None)
+                flash('Oturum hatası. Tekrar giriş yapın.', 'error')
+                return redirect(url_for('auth.login'))
+
+            totp = pyotp.TOTP(user.totp_secret)
+            if totp.verify(code, valid_window=1):
+                session.pop('_2fa_user_id', None)
+                login_user(UserWrapper(user))
+                flash(f'Hoş geldiniz, {user.full_name or user.email}', 'success')
+                return redirect(url_for('main.index'))
+            else:
+                flash('Geçersiz doğrulama kodu. Lütfen tekrar deneyin.', 'error')
+        finally:
+            db_session.close()
+
+    return render_template('2fa_verify.html')
+
+
+# ──────────────────────────────────────────────────────────────
+# SAML 2.0 Routes
+# ──────────────────────────────────────────────────────────────
+
+@auth_bp.route('/sso/saml/login')
+def sso_saml_login():
+    """SP-initiated: kullanıcıyı IdP giriş sayfasına yönlendir."""
+    db_session = get_session()
+    try:
+        sso = _get_active_sso(db_session)
+        if not sso or sso.provider_type != 'saml':
+            flash('SAML SSO yapılandırması bulunamadı.', 'error')
+            return redirect(url_for('auth.login'))
+
+        from sso_manager import SAMLProvider
+        prefix = current_app.config.get('APP_PREFIX', '/radar')
+        provider = SAMLProvider(sso, app_prefix=prefix)
+        auth = provider.init_auth(request)
+        return redirect(provider.get_login_url(auth))
+    finally:
+        db_session.close()
+
+
+@auth_bp.route('/sso/saml/acs', methods=['POST'])
+def sso_saml_acs():
+    """Assertion Consumer Service — IdP'nin SAML yanıtını gönderdiği endpoint."""
+    db_session = get_session()
+    try:
+        sso = _get_active_sso(db_session)
+        if not sso or sso.provider_type != 'saml':
+            return 'SSO yapılandırması bulunamadı', 400
+
+        from sso_manager import SAMLProvider
+        prefix = current_app.config.get('APP_PREFIX', '/radar')
+        provider = SAMLProvider(sso, app_prefix=prefix)
+        auth = provider.init_auth(request)
+
+        try:
+            user_info = provider.process_response(auth)
+        except ValueError as e:
+            flash(str(e), 'error')
+            return redirect(url_for('auth.login'))
+
+        email = user_info['email']
+        name = user_info.get('name', '')
+
+        user = db_session.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                email=email,
+                full_name=name or email,
+                is_active=True,
+                email_verified=True,
+                tenant_id=sso.tenant_id,
+            )
+            db_session.add(user)
+            db_session.commit()
+            db_session.refresh(user)
+        elif not user.email_verified:
+            user.email_verified = True
+            db_session.commit()
+
+        login_user(UserWrapper(user))
+        return redirect(url_for('main.index'))
+    except Exception as e:
+        current_app.logger.error('SAML ACS error: %s', e)
+        flash('SSO girişi sırasında hata oluştu.', 'error')
+        return redirect(url_for('auth.login'))
+    finally:
+        db_session.close()
+
+
+@auth_bp.route('/sso/saml/metadata')
+def sso_saml_metadata():
+    """SP metadata XML — IdP'ye kayıt için."""
+    db_session = get_session()
+    try:
+        sso = _get_active_sso(db_session)
+        if not sso or sso.provider_type != 'saml':
+            return 'SAML SSO yapılandırması bulunamadı', 404
+
+        from sso_manager import SAMLProvider
+        prefix = current_app.config.get('APP_PREFIX', '/radar')
+        provider = SAMLProvider(sso, app_prefix=prefix)
+        metadata, errors = provider.get_metadata(request)
+
+        if errors:
+            return f'Metadata hatası: {", ".join(errors)}', 500
+
+        return Response(metadata, mimetype='text/xml')
+    finally:
+        db_session.close()
+
+
+# ──────────────────────────────────────────────────────────────
+# LDAP / AD Route
+# ──────────────────────────────────────────────────────────────
+
+@auth_bp.route('/sso/ldap/login', methods=['POST'])
+@limiter.limit("10 per minute; 30 per hour", methods=['POST'])
+def sso_ldap_login():
+    """LDAP / Active Directory kimlik doğrulama."""
+    db_session = get_session()
+    try:
+        sso = _get_active_sso(db_session)
+        if not sso or sso.provider_type != 'ldap':
+            flash('LDAP yapılandırması bulunamadı.', 'error')
+            return redirect(url_for('auth.login'))
+
+        username = request.form.get('ldap_username', '').strip()
+        password = request.form.get('ldap_password', '')
+
+        if not username or not password:
+            flash('Kullanıcı adı ve şifre gerekli.', 'error')
+            return redirect(url_for('auth.login'))
+
+        from sso_manager import LDAPProvider
+        provider = LDAPProvider(sso)
+
+        try:
+            user_info = provider.authenticate(username, password)
+        except ValueError as e:
+            flash(str(e), 'error')
+            return redirect(url_for('auth.login'))
+
+        email = user_info['email']
+        name = user_info.get('name', username)
+
+        user = db_session.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                email=email,
+                full_name=name or username,
+                is_active=True,
+                email_verified=True,
+                tenant_id=sso.tenant_id,
+            )
+            db_session.add(user)
+            db_session.commit()
+            db_session.refresh(user)
+        elif not user.email_verified:
+            user.email_verified = True
+            db_session.commit()
+
+        login_user(UserWrapper(user))
+        flash(f'Hoş geldiniz, {user.full_name or email}', 'success')
+        return redirect(url_for('main.index'))
+    except Exception as e:
+        current_app.logger.error('LDAP login error: %s', e)
+        flash('LDAP girişi sırasında hata oluştu.', 'error')
+        return redirect(url_for('auth.login'))
+    finally:
+        db_session.close()

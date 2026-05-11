@@ -64,6 +64,27 @@
         .btn-google:hover { background: #222; border-color: #666; }
         .btn-google img { width: 20px; }
 
+        .btn-sso {
+            background: transparent;
+            border: 1px solid #1d4ed8;
+            color: #93c5fd;
+            padding: 12px 24px;
+            border-radius: 12px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            margin-top: 12px;
+        }
+        .btn-sso:hover { background: rgba(59,130,246,0.1); border-color: #3b82f6; color: #bfdbfe; }
+        .btn-sso svg { width: 18px; height: 18px; flex-shrink: 0; }
+
         .divider { margin: 2rem 0; display: flex; align-items: center; color: #444; font-size: 0.8rem; }
         .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #333; }
         .divider span { padding: 0 1rem; }
@@ -163,6 +184,37 @@
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
             {{ t['google_login'] }}
         </a>
+
+        {% if sso_type == 'saml' %}
+        <a href="{{ url_for('auth.sso_saml_login') }}" class="btn-sso">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Kurumsal SSO ile Giriş (SAML)
+        </a>
+        {% elif sso_type == 'ldap' %}
+        <div id="ldap-section" style="margin-top:12px;">
+            <button type="button" class="btn-sso" onclick="document.getElementById('ldap-form').style.display='block';this.style.display='none';">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                Kurumsal AD/LDAP ile Giriş
+            </button>
+            <form id="ldap-form" action="{{ url_for('auth.sso_ldap_login') }}" method="POST" style="display:none;margin-top:12px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label style="color:#93c5fd;">Kullanıcı Adı (AD)</label>
+                    <input type="text" name="ldap_username" required placeholder="ahmet.yilmaz">
+                </div>
+                <div class="form-group">
+                    <label style="color:#93c5fd;">Şifre</label>
+                    <input type="password" name="ldap_password" required>
+                </div>
+                <button type="submit" class="btn-login" style="background:#1d4ed8;">AD ile Giriş Yap</button>
+            </form>
+        </div>
+        {% endif %}
 
         <div class="divider"><span>{{ t['or'] }}</span></div>
 

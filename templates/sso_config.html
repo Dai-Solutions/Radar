@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}SSO Yapılandırması{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="mb-1 fw-semibold">Kurumsal SSO Yapılandırması</h4>
+      <p class="text-muted small mb-0">SAML 2.0 veya LDAP/Active Directory entegrasyonu</p>
+    </div>
+    <a href="{{ url_for('admin.admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+      ← Admin Panel
+    </a>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show">
+          {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="row g-4">
+    <!-- Sol: Yapılandırma formu -->
+    <div class="col-lg-8">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-dark border-bottom border-secondary">
+          <span class="fw-semibold">SSO Ayarları</span>
+        </div>
+        <div class="card-body">
+          <form method="POST" action="{{ url_for('admin.sso_config') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- Provider seçimi + aktif toggle -->
+            <div class="row mb-4">
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">Provider Tipi</label>
+                <select name="provider_type" id="providerType" class="form-select"
+                        onchange="toggleProvider(this.value)">
+                  <option value="saml" {% if config and config.provider_type == 'saml' %}selected{% endif %}>
+                    SAML 2.0 (Okta, Azure AD, Keycloak…)
+                  </option>
+                  <option value="ldap" {% if config and config.provider_type == 'ldap' %}selected{% endif %}>
+                    LDAP / Active Directory
+                  </option>
+                </select>
+              </div>
+              <div class="col-sm-6 d-flex align-items-end">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="is_active" id="isActive"
+                         {% if config and config.is_active %}checked{% endif %}>
+                  <label class="form-check-label fw-semibold" for="isActive">
+                    SSO Aktif
+                    <span class="badge {% if config and config.is_active %}bg-success{% else %}bg-secondary{% endif %} ms-2">
+                      {% if config and config.is_active %}Açık{% else %}Kapalı{% endif %}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- SAML Paneli -->
+            <div id="saml-panel">
+              <hr class="text-secondary">
+              <h6 class="text-info mb-3">IdP (Identity Provider) Bilgileri</h6>
+              <div class="mb-3">
+                <label class="form-label">IdP Entity ID</label>
+                <input type="url" name="idp_entity_id" class="form-control"
+                       value="{{ config.idp_entity_id or '' if config else '' }}"
+                       placeholder="https://sso.firma.com/saml/metadata">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">IdP SSO URL (Redirect Binding)</label>
+                <input type="url" name="idp_sso_url" class="form-control"
+                       value="{{ config.idp_sso_url or '' if config else '' }}"
+                       placeholder="https://sso.firma.com/saml/sso">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">IdP SLO URL <span class="text-muted">(isteğe bağlı)</span></label>
+                <input type="url" name="idp_slo_url" class="form-control"
+                       value="{{ config.idp_slo_url or '' if config else '' }}"
+                       placeholder="https://sso.firma.com/saml/slo">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">IdP X.509 Sertifikası</label>
+                <textarea name="idp_x509_cert" class="form-control font-monospace" rows="5"
+                          placeholder="MIICpDCCAYwCCQD...">{{ config.idp_x509_cert or '' if config else '' }}</textarea>
+                <div class="form-text">PEM formatında; BEGIN/END CERTIFICATE satırları olmadan yapıştırın.</div>
+              </div>
+              <hr class="text-secondary">
+              <h6 class="text-info mb-3">SP (Service Provider) Bilgileri</h6>
+              <div class="mb-3">
+                <label class="form-label">SP Entity ID <span class="text-muted">(boş bırakılırsa otomatik)</span></label>
+                <input type="url" name="sp_entity_id" class="form-control"
+                       value="{{ config.sp_entity_id or '' if config else '' }}"
+                       placeholder="https://radar.firma.com/radar/sso/saml/metadata">
+              </div>
+              <div class="alert alert-info d-flex align-items-start gap-2 py-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-1 flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <div class="small">
+                  IdP'ye kaydederken kullanılacak SP Metadata URL:
+                  <code>/sso/saml/metadata</code> &nbsp;|&nbsp;
+                  ACS URL: <code>/sso/saml/acs</code>
+                </div>
+              </div>
+            </div>
+
+            <!-- LDAP Paneli -->
+            <div id="ldap-panel" style="display:none;">
+              <hr class="text-secondary">
+              <h6 class="text-info mb-3">LDAP / Active Directory Sunucu</h6>
+              <div class="row mb-3">
+                <div class="col-sm-8">
+                  <label class="form-label">Sunucu Adresi</label>
+                  <input type="text" name="ldap_host" class="form-control"
+                         value="{{ config.ldap_host or '' if config else '' }}"
+                         placeholder="ldap.firma.com">
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label">Port</label>
+                  <input type="number" name="ldap_port" class="form-control"
+                         value="{{ config.ldap_port or 389 if config else 389 }}"
+                         min="1" max="65535">
+                </div>
+                <div class="col-sm-2 d-flex align-items-end pb-1">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="ldap_use_ssl" id="ldapSsl"
+                           {% if config and config.ldap_use_ssl %}checked{% endif %}>
+                    <label class="form-check-label small" for="ldapSsl">LDAPS</label>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Base DN</label>
+                <input type="text" name="ldap_base_dn" class="form-control font-monospace"
+                       value="{{ config.ldap_base_dn or '' if config else '' }}"
+                       placeholder="DC=firma,DC=com">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Servis Hesabı (Bind DN)</label>
+                <input type="text" name="ldap_bind_dn" class="form-control font-monospace"
+                       value="{{ config.ldap_bind_dn or '' if config else '' }}"
+                       placeholder="CN=svc-radar,OU=ServiceAccounts,DC=firma,DC=com">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Servis Hesabı Şifresi</label>
+                <input type="password" name="ldap_bind_password" class="form-control"
+                       placeholder="{% if config and config.ldap_bind_password %}••••••••{% else %}Şifre girin{% endif %}">
+                {% if config and config.ldap_bind_password %}
+                <div class="form-text text-success">✓ Şifre kayıtlı — boş bırakırsanız değişmez.</div>
+                {% endif %}
+              </div>
+              <hr class="text-secondary">
+              <h6 class="text-info mb-3">Kullanıcı Eşleme</h6>
+              <div class="mb-3">
+                <label class="form-label">Arama Filtresi</label>
+                <input type="text" name="ldap_user_search_filter" class="form-control font-monospace"
+                       value="{{ config.ldap_user_search_filter or '(sAMAccountName={username})' if config else '(sAMAccountName={username})' }}"
+                       placeholder="(sAMAccountName={username})">
+                <div class="form-text"><code>{username}</code> → girilen kullanıcı adıyla değiştirilir.</div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-sm-6">
+                  <label class="form-label">E-posta Attribute</label>
+                  <input type="text" name="ldap_email_attr" class="form-control font-monospace"
+                         value="{{ config.ldap_email_attr or 'mail' if config else 'mail' }}"
+                         placeholder="mail">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label">Görünen Ad Attribute</label>
+                  <input type="text" name="ldap_name_attr" class="form-control font-monospace"
+                         value="{{ config.ldap_name_attr or 'displayName' if config else 'displayName' }}"
+                         placeholder="displayName">
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <button type="submit" class="btn btn-primary px-4">Kaydet</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sağ: Durum kartı -->
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-dark border-bottom border-secondary">
+          <span class="fw-semibold">Mevcut Durum</span>
+        </div>
+        <div class="card-body">
+          {% if config %}
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <span class="badge {% if config.is_active %}bg-success{% else %}bg-secondary{% endif %} fs-6">
+                {% if config.is_active %}Aktif{% else %}Pasif{% endif %}
+              </span>
+              <span class="badge bg-info text-dark">{{ config.provider_type | upper }}</span>
+            </div>
+            {% if config.provider_type == 'saml' and config.idp_entity_id %}
+              <p class="small text-muted mb-1">IdP Entity ID:</p>
+              <code class="small d-block text-truncate text-info">{{ config.idp_entity_id }}</code>
+            {% elif config.provider_type == 'ldap' and config.ldap_host %}
+              <p class="small text-muted mb-1">LDAP Sunucu:</p>
+              <code class="small text-info">{{ config.ldap_host }}:{{ config.ldap_port }}</code>
+            {% endif %}
+          {% else %}
+            <p class="text-muted small">Henüz yapılandırma yok.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if config and config.provider_type == 'saml' and config.is_active %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-dark border-bottom border-secondary">
+          <span class="fw-semibold">SP Endpoint'leri</span>
+        </div>
+        <div class="card-body small">
+          <p class="mb-1 text-muted">Metadata URL (IdP kaydı):</p>
+          <code class="d-block text-info text-break mb-3">/sso/saml/metadata</code>
+          <p class="mb-1 text-muted">ACS URL (IdP callback):</p>
+          <code class="d-block text-info text-break mb-3">/sso/saml/acs</code>
+          <p class="mb-1 text-muted">Giriş URL:</p>
+          <code class="d-block text-info text-break">/sso/saml/login</code>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleProvider(type) {
+    document.getElementById('saml-panel').style.display = type === 'saml' ? 'block' : 'none';
+    document.getElementById('ldap-panel').style.display = type === 'ldap' ? 'block' : 'none';
+}
+
+// Sayfa yüklendiğinde mevcut seçime göre paneli göster
+document.addEventListener('DOMContentLoaded', function() {
+    toggleProvider(document.getElementById('providerType').value);
+});
+</script>
+{% endblock %}
