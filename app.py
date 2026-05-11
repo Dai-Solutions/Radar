@@ -19,14 +19,20 @@ from routes.main import main_bp
 from routes.customer import customer_bp
 from routes.scoring import scoring_bp
 from routes.admin import admin_bp
+from routes.portfolio import portfolio_bp
+from routes.ml import ml_bp
+from routes.bddk import bddk_bp
+from routes.openbanking import ob_bp
 
 # Logic & Utils
 from database import init_db, get_session, remove_session, User
 from translations import translations
 
 def create_app():
-    # Load environment variables
-    dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '.env'))
+    # Load environment variables (.env.dev öncelikli, yoksa .env)
+    base = os.path.dirname(__file__)
+    dev_env = os.path.join(base, '.env.dev')
+    dotenv_path = dev_env if os.path.exists(dev_env) else os.path.join(base, '.env')
     load_dotenv(dotenv_path, override=True)
     
     app = Flask(__name__)
@@ -107,6 +113,10 @@ def create_app():
     app.register_blueprint(scoring_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)  # API documentation & endpoints
+    app.register_blueprint(portfolio_bp)
+    app.register_blueprint(ml_bp)
+    app.register_blueprint(bddk_bp)
+    app.register_blueprint(ob_bp)
     
     # Çeviri sözlüklerini app start'ta bir kez prefix ile materialize et
     import json as _json

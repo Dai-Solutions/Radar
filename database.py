@@ -84,6 +84,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     email_verified = Column(Boolean, default=False)
+    totp_secret = Column(String, nullable=True)
+    totp_enabled = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="users")
@@ -130,6 +132,7 @@ class Customer(Base):
     user = relationship("User")
     aging_records = relationship("AgingRecord", back_populates="customer", cascade="all, delete-orphan")
     credit_requests = relationship("CreditRequest", back_populates="customer", cascade="all, delete-orphan")
+    kkb_reports = relationship("KKBReport", back_populates="customer", cascade="all, delete-orphan")
 
 class AgingRecord(Base):
     __tablename__ = 'aging_records'
@@ -203,11 +206,151 @@ class CreditScore(Base):
     # Hierarchical Vade Result
     vade_days = Column(Integer)
     vade_message = Column(String)
+
+    # KKB entegrasyon sonuçları
+    kkb_veto = Column(String(50), nullable=True)
+    kkb_enriched = Column(Boolean, default=False)
+
+    # IFRS 9 / Basel III
+    ifrs9_stage = Column(Integer, nullable=True)          # 1, 2, 3
+    ifrs9_pd = Column(Float, nullable=True)               # Temerrüt olasılığı
+    ifrs9_lgd = Column(Float, nullable=True)              # Temerrüt kayıp oranı
+    ifrs9_ead = Column(Float, nullable=True)              # Maruz kalım (TL)
+    ifrs9_ecl = Column(Float, nullable=True)              # Beklenen kredi zararı (TL)
+    ifrs9_rwa = Column(Float, nullable=True)              # Risk ağırlıklı varlık (TL)
+    ifrs9_capital_req = Column(Float, nullable=True)      # Sermaye gereksinimi (TL)
     
     calculated_at = Column(DateTime, default=datetime.utcnow)
     
     customer = relationship("Customer")
     request = relationship("CreditRequest", back_populates="score_result")
+
+class KKBReport(Base):
+    """
+    KKB (Kredi Kayıt Bürosu) kurumsal risk raporu.
+
+    Her sorgu önbelleğe alınır (expires_at). Cache süresi dolmadan
+    aynı vergi no için API çağrısı yapılmaz. Hard veto alanları
+    (has_bounced_check, active_enforcement) CreditScorer'da öncelikli
+    kontrol edilir; pozitifse skor hesaplanmadan ret kararı üretilir.
+
+    source: 'kkb_api' | 'manual' | 'mock'
+    """
+    __tablename__ = 'kkb_reports'
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey('customers.id'), nullable=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=True, default=1, index=True)
+    tax_no = Column(String(11), nullable=False, index=True)
+
+    # KRS — Kurumsal Risk Sistemi: tüm bankalardan konsolide borç
+    total_bank_exposure = Column(Float)     # Toplam kredi borcu (TL)
+    npl_amount = Column(Float, default=0.0) # Takipteki alacak tutarı
+    npl_flag = Column(Boolean, default=False)
+
+    # RSK — ödeme geçmişi, son 12 ay
+    max_days_past_due = Column(Integer, default=0)
+    num_late_payments = Column(Integer, default=0)
+
+    # Hard veto — pozitifse skor hesaplanmadan ret
+    has_bounced_check = Column(Boolean, default=False)
+    active_enforcement = Column(Boolean, default=False)
+
+    # GKD — KKB'nin kendi derecelendirmesi (opsiyonel, her bankada gelmeyebilir)
+    kkb_score = Column(Integer)   # 1–1900 arası puan
+    kkb_grade = Column(String(2)) # A / B / C / D
+
+    # KVKK — sorgu için açık rıza zorunlu
+    consent_given = Column(Boolean, default=False)
+    consent_timestamp = Column(DateTime)
+
+    # Meta
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)  # varsayılan 30 gün TTL
+    raw_response = Column(Text)  # ham XML/JSON — audit ve debug için
+    source = Column(String(20), default='mock')
+
+    customer = relationship("Customer", back_populates="kkb_reports")
+    tenant = relationship("Tenant")
+
+
+class OpenBankingRecord(Base):
+    """
+    Open Banking hesap/işlem özeti.
+
+    Her IBAN için önbelleklenir (expires_at). Cashflow ve bakiye
+    verileri CreditScorer'da historical + future skor zenginleştirmesinde kullanılır.
+
+    source: 'mock' | 'sandbox' | 'live'
+    """
+    __tablename__ = 'openbanking_records'
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey('customers.id'), nullable=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=True, default=1, index=True)
+    iban = Column(String(34), nullable=False, index=True)
+
+    # Hesap özeti (12 ay ortalama)
+    avg_monthly_balance = Column(Float, default=0.0)   # Aylık ort. bakiye (TL)
+    avg_monthly_inflow = Column(Float, default=0.0)    # Aylık ort. giren para
+    avg_monthly_outflow = Column(Float, default=0.0)   # Aylık ort. çıkan para
+    overdraft_count = Column(Integer, default=0)        # Negatif bakiye gün sayısı
+    cashflow_regularity = Column(Float, default=1.0)    # 0–1: 1=çok düzenli
+
+    # Banka çeşitliliği
+    bank_count = Column(Integer, default=1)            # Farklı banka hesabı sayısı
+
+    # KVKK — açık rıza
+    consent_given = Column(Boolean, default=False)
+    consent_timestamp = Column(DateTime)
+
+    # Meta
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    raw_response = Column(Text)
+    source = Column(String(20), default='mock')
+
+    customer = relationship("Customer")
+    tenant = relationship("Tenant")
+
+
+class SSOConfig(Base):
+    """
+    Tenant başına SSO yapılandırması — SAML 2.0 veya LDAP/AD.
+
+    provider_type: 'saml' | 'ldap'
+    Tüm alanlar opsiyonel; aktif provider_type'a göre doldurulur.
+    """
+    __tablename__ = 'sso_configs'
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=False, unique=True, index=True)
+    provider_type = Column(String(10), nullable=False, default='saml')  # 'saml' | 'ldap'
+    is_active = Column(Boolean, default=False)
+
+    # SAML 2.0 — IdP bilgileri
+    idp_entity_id = Column(String)
+    idp_sso_url = Column(String)
+    idp_slo_url = Column(String)
+    idp_x509_cert = Column(Text)
+    sp_entity_id = Column(String)
+
+    # LDAP / Active Directory
+    ldap_host = Column(String)
+    ldap_port = Column(Integer, default=389)
+    ldap_use_ssl = Column(Boolean, default=False)
+    ldap_base_dn = Column(String)
+    ldap_bind_dn = Column(String)
+    ldap_bind_password = Column(String)
+    ldap_user_search_filter = Column(String, default='(sAMAccountName={username})')
+    ldap_email_attr = Column(String, default='mail')
+    ldap_name_attr = Column(String, default='displayName')
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tenant = relationship("Tenant")
+
 
 class Feedback(Base):
     __tablename__ = 'feedbacks'
@@ -215,8 +358,25 @@ class Feedback(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     message = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     user = relationship("User")
+
+
+class BatchJob(Base):
+    """Celery toplu portföy analizi iş takibi."""
+    __tablename__ = 'batch_jobs'
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.id'), nullable=True, default=1)
+    celery_task_id = Column(String(64), nullable=True, index=True)
+    job_type = Column(String(32), default='portfolio_scan')  # portfolio_scan | ...
+    status = Column(String(16), default='pending')           # pending | running | done | error
+    total = Column(Integer, default=0)
+    processed = Column(Integer, default=0)
+    summary_json = Column(Text, nullable=True)   # JSON özet: dağılım, ECL, vs.
+    error_message = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
 
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
 
@@ -281,6 +441,8 @@ _PENDING_COLUMNS = {
     'users': [
         ('tenant_id', 'INTEGER'),
         ('language', 'VARCHAR(5)'),
+        ('totp_secret', 'VARCHAR(64)'),
+        ('totp_enabled', 'BOOLEAN DEFAULT FALSE'),
     ],
     'customers': [
         ('tenant_id', 'INTEGER'),
@@ -295,8 +457,46 @@ _PENDING_COLUMNS = {
         ('principal_payments', 'FLOAT'),
         ('sector', 'VARCHAR(32)'),
     ],
+    'credit_requests': [
+        ('currency', "VARCHAR(8) DEFAULT 'TRY'"),
+    ],
     'audit_logs': [
         ('deleted_at', 'TIMESTAMP'),
+    ],
+    'batch_jobs': [],           # yeni tablo, create_all yönetir
+    'openbanking_records': [],  # yeni tablo, create_all yönetir
+    'credit_scores': [
+        # Faz 4 — Altman, DSCR, volatility
+        ('z_score', 'FLOAT'),
+        ('z_score_note', 'VARCHAR(32)'),
+        ('dscr_score', 'FLOAT'),
+        ('volatility', 'FLOAT'),
+        # Faz 4 — Piotroski, ICR, aging
+        ('piotroski_score', 'INTEGER'),
+        ('piotroski_grade', 'VARCHAR(8)'),
+        ('icr_score', 'FLOAT'),
+        ('aging_concentration', 'FLOAT'),
+        # Faz 4 — Vade
+        ('vade_days', 'INTEGER'),
+        ('vade_message', 'VARCHAR(128)'),
+        # Faz 5 — KKB
+        ('kkb_veto', 'VARCHAR(50)'),
+        ('kkb_enriched', 'BOOLEAN'),
+        # Faz 4 — assessment/summary/scenarios (pre-Faz-4 DBs may be missing these)
+        ('assessment', 'TEXT'),
+        ('decision_summary', 'TEXT'),
+        ('scenarios_json', 'TEXT'),
+        # Faz 5 — IFRS 9 / Basel III
+        ('ifrs9_stage', 'INTEGER'),
+        ('ifrs9_pd', 'FLOAT'),
+        ('ifrs9_lgd', 'FLOAT'),
+        ('ifrs9_ead', 'FLOAT'),
+        ('ifrs9_ecl', 'FLOAT'),
+        ('ifrs9_rwa', 'FLOAT'),
+        ('ifrs9_capital_req', 'FLOAT'),
+        # ML Overlay
+        ('ml_pd', 'FLOAT'),
+        ('ob_enriched', 'BOOLEAN'),
     ],
 }
 
