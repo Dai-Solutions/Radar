@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block page_guide %}
+<div class="guide-title"><i class="bi bi-file-earmark-ruled me-1"></i>BDDK Düzenleyici Raporlama</div>
+<p class="guide-text">BDDK'ya sunulmak üzere XBRL/XML formatında resmi raporlar üretir.</p>
+<ul class="guide-steps">
+  <li><strong>KR-1</strong>: Müşteri bazlı kredi riski raporu (ECL, PD, LGD, RWA).</li>
+  <li><strong>KR-3</strong>: IFRS 9 karşılık tablosu — aşama bazlı ECL toplamları.</li>
+  <li><strong>SY-1</strong>: Sermaye yeterliliği — Basel III RWA ve CAR tahmini.</li>
+  <li>Raporu indirdikten sonra BDDK'nın raporlama portalına yükleyebilirsiniz.</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4" style="max-width:860px;">
+
+  <div class="mb-4">
+    <h2 class="fw-bold mb-1">BDDK Düzenleyici Raporlama</h2>
+    <p class="text-secondary mb-0 small">
+      XML / XBRL formatında BDDK uyumlu raporlar — kredi riski, IFRS 9 karşılıkları, sermaye yeterliliği
+    </p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+        {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('bddk.indir') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Rapor Türü Seçimi -->
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header border-secondary fw-semibold">1. Rapor Türü</div>
+      <div class="card-body">
+        <div class="row g-3">
+          {% for key, meta in rapor_turleri.items() %}
+          <div class="col-md-4">
+            <input type="radio" class="btn-check" name="rapor_turu" id="rt_{{ key }}"
+                   value="{{ key }}" {% if loop.first %}checked{% endif %}>
+            <label class="btn btn-outline-secondary w-100 text-start p-3 h-100" for="rt_{{ key }}">
+              <i class="bi {{ meta.icon }} fs-4 d-block mb-2 text-primary"></i>
+              <strong style="font-size:.9rem;">{{ meta.label }}</strong>
+              <div class="text-secondary mt-1" style="font-size:.78rem;line-height:1.4;">{{ meta.aciklama }}</div>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Dönem & Kurum -->
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header border-secondary fw-semibold">2. Dönem & Kurum Bilgisi</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label text-secondary small">Dönem Başlangıcı</label>
+            <input type="date" class="form-control bg-dark text-white border-secondary"
+                   name="period_start"
+                   value="{{ today[:8] }}01">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-secondary small">Dönem Bitişi</label>
+            <input type="date" class="form-control bg-dark text-white border-secondary"
+                   name="period_end"
+                   value="{{ today }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-secondary small">Kurum Adı (XML'de görünür)</label>
+            <input type="text" class="form-control bg-dark text-white border-secondary"
+                   name="entity_name"
+                   placeholder="Şirket Adı"
+                   value="Radar Kullanıcı">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- İndir -->
+    <div class="d-flex gap-3 align-items-center">
+      <button type="submit" class="btn btn-primary px-5 py-2">
+        <i class="bi bi-download me-2"></i> XML Raporu İndir
+      </button>
+      <span class="text-secondary small">
+        Rapor, BDDK taksonomisine uyumlu XBRL-XML formatında oluşturulur.
+      </span>
+    </div>
+  </form>
+
+  <!-- Açıklama Kutusu -->
+  <div class="card bg-dark border-secondary mt-4">
+    <div class="card-header border-secondary fw-semibold">Rapor Formatı Hakkında</div>
+    <div class="card-body small text-secondary" style="line-height:1.7;">
+      <div class="row g-4">
+        <div class="col-md-6">
+          <strong class="text-white">XML Yapısı</strong><br>
+          Raporlar XBRL instance document formatında üretilir.
+          Her rapor <code>bddk:</code> namespace'i altında fact elemanları içerir,
+          <code>xbrli:context</code> ve <code>xbrli:unit</code> blokları ile donatılmıştır.
+        </div>
+        <div class="col-md-6">
+          <strong class="text-white">Veri Kaynağı</strong><br>
+          Raporlar, sistemde kayıtlı <strong>son kredi skoru</strong> hesaplamalarından üretilir.
+          Gerçek zamanlı veri için önce <a href="{{ url_for('portfolio.index') }}" class="text-primary">
+          Portföy Taraması</a> yapmanız önerilir.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
