@@ -62,14 +62,35 @@ class CreditScoreResult:
     piotroski_grade: str = ""
     icr_score: float = 0.0
     aging_concentration: float = 0.0
+    # KKB entegrasyon alanları
+    kkb_veto: Optional[str] = None     # hard veto nedeni (None = veto yok)
+    kkb_score: Optional[int] = None    # KKB/GKD skoru (1-1900)
+    kkb_grade: Optional[str] = None    # KKB notu (A/B/C/D)
+    kkb_enriched: bool = False         # KKB verisiyle ağırlıklandırma yapıldı mı
+    # Open Banking
+    ob_enriched: bool = False          # OB verisiyle zenginleştirme yapıldı mı
+    # ML Overlay
+    ml_pd: float = -1.0               # ML PD tahmini (-1 = model mevcut değil)
+    ml_adjusted: bool = False          # IFRS 9 PD ML ile harmanlandi mı
+    # IFRS 9 / Basel III
+    ifrs9_stage: int = 0               # 1, 2, 3
+    ifrs9_pd: float = 0.0              # Temerrüt olasılığı (0-1)
+    ifrs9_lgd: float = 0.0             # Temerrüt kayıp oranı (0-1)
+    ifrs9_ead: float = 0.0             # Temerrüt anı maruz kalım (TL)
+    ifrs9_ecl: float = 0.0             # Beklenen kredi zararı (TL)
+    ifrs9_rwa: float = 0.0             # Risk ağırlıklı varlık — Basel III (TL)
+    ifrs9_capital_req: float = 0.0     # Pillar 1 sermaye gereksinimi (TL)
+    ifrs9_stage_reason: str = ""       # Aşama gerekçesi
 
 class CreditScorer:
     """Credit scoring engine"""
     
-    def __init__(self, customer_id=None, db_session=None, aging_analyzer=None, customer_data=None, aging_records=None):
+    def __init__(self, customer_id=None, db_session=None, aging_analyzer=None, customer_data=None, aging_records=None, kkb_report=None, ob_record=None):
         self.customer_id = customer_id
         self.session = db_session
         self.aging_analyzer = aging_analyzer or AgingAnalyzer()
+        self.kkb_report = kkb_report
+        self.ob_record = ob_record
         
         # Load data: priority to passed objects, then DB
         if customer_data:
@@ -118,7 +139,18 @@ class CreditScorer:
         if isinstance(obj, dict): return obj.get(attr, default)
         return getattr(obj, attr, default)
 
-    def calculate(self, settings, request_input, skip_scenarios=False, lang='tr'):
+    def calculate(self, settings, request_input, skip_scenarios=False, lang='tr', kkb_report=None):
+        # KKB: çağrı-seviyesi rapor parametre-üzerinden gelirse __init__ raporu override eder
+        active_kkb = kkb_report if kkb_report is not None else self.kkb_report
+
+        # ── KKB Hard Veto ────────────────────────────────────────────────────
+        # Karşılıksız çek, aktif icra veya NPL tespitinde skor hesaplanmadan
+        # erken çıkış yapılır. Rapor ve tüm dil metinleri yine de üretilir.
+        from kkb_adapter import KKBAdapter
+        veto_reason = KKBAdapter.check_veto(active_kkb)
+        if veto_reason:
+            return self._veto_result(veto_reason, request_input, active_kkb, lang)
+
         # Settings Inputs
         inflation_rate = float(self._safe_get(settings, 'inflation_rate', 55.0))
         interest_rate = float(self._safe_get(settings, 'interest_rate', 45.0))
@@ -172,16 +204,33 @@ class CreditScorer:
         base_volume = avg_debt
         
         historical_score = self._safe_get(analysis, 'historical_score')
-        
+
         # Apply Volatility Penalty
         volatility = self._safe_get(analysis, 'delay_volatility', 0)
         if volatility > 15: # High volatility (> 15 days)
             vol_penalty = min(20, (volatility - 15) * 1.5)
             historical_score = max(0, historical_score - vol_penalty)
-            
+
         future_score = self.aging_analyzer._calculate_future_score(self._safe_get(analysis, 'future_total_debt'), avg_debt, base_volume, interest_rate=interest_rate)
         debt_score = self._calculate_debt_score(avg_debt)
         request_score = self._calculate_request_score(request_amount, max(1, avg_debt))
+
+        # ── KKB Ağırlıklandırma ──────────────────────────────────────────────
+        kkb_enriched = False
+        if active_kkb is not None:
+            historical_score, debt_score = KKBAdapter.enrich_scores(
+                historical_score, debt_score, active_kkb
+            )
+            kkb_enriched = True
+
+        # ── Open Banking Zenginleştirme ──────────────────────────────────────
+        ob_enriched = False
+        if self.ob_record is not None:
+            from openbanking_adapter import OpenBankingAdapter
+            historical_score, future_score = OpenBankingAdapter.enrich_scores(
+                historical_score, future_score, self.ob_record
+            )
+            ob_enriched = True
         
         # 3. Final Calculation
         if avg_debt == 0:
@@ -232,7 +281,39 @@ class CreditScorer:
         pio_impact = (piotroski - 4.5) * 0.5  # 0 = -2.25, 9 = +2.25
         final_score = max(0, min(100, final_score + pio_impact))
 
-        # 5. Sonuçlar
+        # 5. IFRS 9 / Basel III
+        from ifrs9_engine import IFRS9Engine
+        ifrs9 = IFRS9Engine().calculate(
+            final_score=final_score,
+            avg_debt=avg_debt,
+            request_amount=request_amount,
+            total_assets=total_assets,
+            total_liabilities=total_liabilities,
+            equity=equity,
+            kkb_report=active_kkb,
+            veto_reason=veto_reason,
+        )
+
+        # 5b. ML Overlay — kural tabanlı PD'ye ML tahminini harmanlıyor
+        import ml_overlay
+        ml_features = {
+            'final_score': final_score,
+            'historical_score': historical_score,
+            'future_score': future_score,
+            'z_score': z_score,
+            'dscr_score': dscr,
+            'volatility': volatility,
+            'piotroski_score': piotroski,
+            'icr_score': icr,
+            'aging_concentration': aging_conc,
+            'avg_delay_days': float(self._safe_get(analysis, 'avg_delay_days', 0)),
+        }
+        ml_raw_pd = ml_overlay.predict_pd(ml_features)
+        blended_pd, ml_adjusted = ml_overlay.blend_pd(ifrs9.pd, ml_features)
+        if ml_adjusted:
+            ifrs9.pd = blended_pd
+
+        # 6. Sonuçlar
         rec_limit, rec_msg = self._calculate_limit_recommendation(final_score, note, request_amount, lang)
         max_cap = self._calculate_max_capacity(equity, liquidity, avg_debt, note, interest_rate, sector_risk)
         vade_days, vade_key, inf_capped = self._calculate_vade_recommendation(
@@ -255,6 +336,20 @@ class CreditScorer:
             dscr_score=round(dscr, 2), volatility=round(volatility, 1),
             piotroski_score=piotroski, piotroski_grade=pio_grade,
             icr_score=icr, aging_concentration=aging_conc,
+            kkb_enriched=kkb_enriched,
+            kkb_score=getattr(active_kkb, 'kkb_score', None),
+            kkb_grade=getattr(active_kkb, 'kkb_grade', None),
+            ob_enriched=ob_enriched,
+            ml_pd=ml_raw_pd,
+            ml_adjusted=ml_adjusted,
+            ifrs9_stage=ifrs9.stage,
+            ifrs9_pd=ifrs9.pd,
+            ifrs9_lgd=ifrs9.lgd,
+            ifrs9_ead=ifrs9.ead,
+            ifrs9_ecl=ifrs9.ecl,
+            ifrs9_rwa=ifrs9.rwa,
+            ifrs9_capital_req=ifrs9.capital_req,
+            ifrs9_stage_reason=ifrs9.stage_reason,
         )
 
         # i18n: Yorum metinlerini 4 dilde üret. Rapor sonradan farklı dilde
@@ -567,6 +662,76 @@ class CreditScorer:
             pass
 
         return scenarios
+
+    def _veto_result(self, veto_reason: str, request_input, kkb_report, lang: str) -> 'CreditScoreResult':
+        """
+        KKB hard veto durumunda sıfır skorlu sonuç üretir.
+        Skor hesaplaması yapılmaz; ret kararı ve veto nedeni raporlanır.
+        """
+        veto_labels = {
+            'kkb_bounced_check':     {'tr': 'Karşılıksız çek kaydı tespit edildi.',
+                                      'en': 'Bounced cheque record detected.',
+                                      'es': 'Cheque sin fondos detectado.',
+                                      'de': 'Ungedeckter Scheck festgestellt.'},
+            'kkb_active_enforcement': {'tr': 'Aktif icra takibi mevcut.',
+                                       'en': 'Active enforcement proceeding on file.',
+                                       'es': 'Proceso de ejecución activo.',
+                                       'de': 'Aktives Vollstreckungsverfahren vorhanden.'},
+            'kkb_npl':               {'tr': 'Takipteki alacak (NPL) kaydı mevcut.',
+                                      'en': 'Non-performing loan record on file.',
+                                      'es': 'Registro de préstamo moroso.',
+                                      'de': 'Notleidender Kredit vermerkt.'},
+        }
+        label = veto_labels.get(veto_reason, {}).get(lang, veto_reason)
+        request_amount = float(self._safe_get(request_input, 'request_amount', 0))
+        name = getattr(self.customer, 'account_name', '') if self.customer else ''
+        code = getattr(self.customer, 'account_code', '') if self.customer else ''
+
+        from ifrs9_engine import IFRS9Engine
+        veto_ifrs9 = IFRS9Engine().calculate(
+            final_score=0.0,
+            avg_debt=0.0,
+            request_amount=request_amount,
+            kkb_report=kkb_report,
+            veto_reason=veto_reason,
+        )
+
+        result = CreditScoreResult(
+            account_code=code,
+            account_name=name,
+            historical_score=0.0,
+            future_score=0.0,
+            request_score=0.0,
+            debt_score=0.0,
+            final_score=0.0,
+            credit_note='C',
+            avg_delay_days=0.0,
+            avg_debt=0.0,
+            future_6_months_total=0.0,
+            request_amount=request_amount,
+            recommended_limit=0.0,
+            recommendation_message=label,
+            kkb_veto=veto_reason,
+            kkb_score=getattr(kkb_report, 'kkb_score', None),
+            kkb_grade=getattr(kkb_report, 'kkb_grade', None),
+            kkb_enriched=False,
+            ifrs9_stage=veto_ifrs9.stage,
+            ifrs9_pd=veto_ifrs9.pd,
+            ifrs9_lgd=veto_ifrs9.lgd,
+            ifrs9_ead=veto_ifrs9.ead,
+            ifrs9_ecl=veto_ifrs9.ecl,
+            ifrs9_rwa=veto_ifrs9.rwa,
+            ifrs9_capital_req=veto_ifrs9.capital_req,
+            ifrs9_stage_reason=veto_ifrs9.stage_reason,
+        )
+        all_langs = ('tr', 'en', 'es', 'de')
+        result.decision_summary_i18n = {
+            L: veto_labels.get(veto_reason, {}).get(L, label) for L in all_langs
+        }
+        result.decision_summary = label
+        result.assessment_i18n = result.decision_summary_i18n.copy()
+        result.assessment = label
+        return result
 
     def _calculate_debt_score(self, avg_debt):
         for (mi, ma), sc in self.DEBT_SCORE_TABLE.items():
