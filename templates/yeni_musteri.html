@@ -2,6 +2,17 @@
 
 {% block title %}{{ t['new_customer'] }}{% endblock %}
 
+{% block page_guide %}
+<div class="guide-title"><i class="bi bi-person-plus me-1"></i>Yeni Müşteri Kaydı</div>
+<p class="guide-text">Bu form ile sisteme yeni bir müşteri eklersiniz.</p>
+<ul class="guide-steps">
+  <li><strong>Hesap Kodu ve Hesap Adı</strong> zorunludur; benzersiz olmalıdır.</li>
+  <li>Finansal veriler (aktifler, borçlar, EBIT vb.) girilirse Altman Z-Score ve DSCR hesaplanır.</li>
+  <li>Kaydettikten sonra müşteri detay sayfasından <strong>Skor Hesapla</strong>'yı kullanın.</li>
+  <li>Çok sayıda müşteri için üst menüden <strong>İçe Aktar</strong> (Excel) tercih edin.</li>
+</ul>
+{% endblock %}
+
 {% block extra_style %}
         .main-container { padding-top: 3rem; padding-bottom: 5rem; }
         .form-label { font-size: 0.75rem; text-transform: uppercase; color: var(--secondary); font-weight: 700; margin-bottom: 0.5rem; letter-spacing: 0.5px; }

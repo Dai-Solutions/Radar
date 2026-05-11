@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from database import get_session, Customer, AgingRecord as AgingRecordDB, CreditRequest, CreditScore
+from datetime import datetime
+from database import get_session, Customer, AgingRecord as AgingRecordDB, CreditRequest, CreditScore, KKBReport
 
 customer_bp = Blueprint('customer', __name__)
 
@@ -109,7 +110,71 @@ def customer_detail(customer_id):
                 'score': score.final_score if score else 0
             })
 
+        kkb_report = (
+            session.query(KKBReport)
+            .filter(KKBReport.customer_id == customer_id,
+                    KKBReport.expires_at > datetime.utcnow())
+            .order_by(KKBReport.fetched_at.desc())
+            .first()
+        )
+
         return render_template('musteri_detay.html', customer=customer,
-                               aging_records=processed_aging, requests=request_list)
+                               aging_records=processed_aging, requests=request_list,
+                               kkb_report=kkb_report)
     finally:
         session.close()
+
+
+@customer_bp.route('/customer/<int:customer_id>/kkb-sorgu', methods=['POST'])
+@login_required
+def kkb_query(customer_id):
+    consent = request.form.get('consent') == 'true'
+    if not consent:
+        flash('KKB sorgusu için müşteri KVKK rızası gereklidir.', 'error')
+        return redirect(url_for('customer.customer_detail', customer_id=customer_id))
+
+    session = get_session()
+    try:
+        customer = session.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.user_id == current_user.id,
+        ).first()
+
+        if not customer:
+            return 'Yetkisiz erişim', 403
+
+        if not customer.tax_no:
+            flash('KKB sorgusu için müşterinin vergi numarası tanımlı olmalıdır.', 'error')
+            return redirect(url_for('customer.customer_detail', customer_id=customer_id))
+
+        from kkb_adapter import KKBAdapter
+        adapter = KKBAdapter()
+        tenant_id = getattr(current_user, 'tenant_id', 1) or 1
+        report = adapter.get_corporate_risk(customer.tax_no, customer_id, tenant_id, session)
+
+        if report:
+            report.consent_given = True
+            report.consent_timestamp = datetime.utcnow()
+            session.commit()
+
+        try:
+            from enterprise import log_audit_action
+            log_audit_action(
+                tenant_id=getattr(current_user, 'tenant_id', 1) or 1,
+                user_id=current_user.id,
+                action='kkb_query',
+                entity_type='Customer',
+                entity_id=customer_id,
+                status='success',
+            )
+        except Exception:
+            pass
+
+        flash('KKB sorgusu tamamlandı.', 'success')
+    except Exception as exc:
+        session.rollback()
+        flash(f'KKB sorgusu başarısız: {exc}', 'error')
+    finally:
+        session.close()
+
+    return redirect(url_for('customer.customer_detail', customer_id=customer_id))
