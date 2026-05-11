@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid px-4 py-4">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{{ url_for('portfolio.index') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h2 class="fw-bold mb-0">Portföy Tarama #{{ job.id }}</h2>
+      <span class="text-secondary" style="font-size:.85rem;">{{ job.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+    </div>
+    {% if job.status == 'done' %}
+      <span class="badge bg-success ms-auto">Tamamlandı</span>
+    {% elif job.status == 'running' %}
+      <span class="badge bg-primary ms-auto" id="status-badge">Çalışıyor</span>
+    {% elif job.status == 'error' %}
+      <span class="badge bg-danger ms-auto">Hata</span>
+    {% else %}
+      <span class="badge bg-secondary ms-auto" id="status-badge">Bekliyor</span>
+    {% endif %}
+  </div>
+
+  {% if job.status in ('pending', 'running') %}
+  <!-- Canlı ilerleme -->
+  <div class="card bg-dark border-secondary mb-4" id="progress-card">
+    <div class="card-body py-4 text-center">
+      <div class="mb-3 text-secondary">Müşteriler taranıyor…</div>
+      <div class="progress mx-auto" style="height:10px;max-width:400px;" id="prog-bar-wrap">
+        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+             id="prog-bar" style="width:0%"></div>
+      </div>
+      <div class="mt-2 text-secondary" id="prog-text">0 / ?</div>
+    </div>
+  </div>
+  <script>
+  (function() {
+    const jobId = {{ job.id }};
+    const pollUrl = '{{ url_for("portfolio.durum", job_id=job.id) }}';
+    const resultUrl = '{{ url_for("portfolio.sonuc", job_id=job.id) }}';
+    function poll() {
+      fetch(pollUrl).then(r => r.json()).then(d => {
+        document.getElementById('prog-bar').style.width = d.pct + '%';
+        document.getElementById('prog-text').textContent = d.processed + ' / ' + d.total;
+        if (d.status === 'done' || d.status === 'error') {
+          window.location.reload();
+        } else {
+          setTimeout(poll, 1500);
+        }
+      }).catch(() => setTimeout(poll, 3000));
+    }
+    poll();
+  })();
+  </script>
+
+  {% elif job.status == 'error' %}
+  <div class="alert alert-danger">
+    <strong>Hata:</strong> {{ job.error_message or 'Bilinmeyen hata' }}
+  </div>
+
+  {% elif summary %}
+  <!-- ─── ÖZET KARTLAR ─────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-1 fw-bold text-primary">{{ summary.scored }}</div>
+          <div class="text-secondary" style="font-size:.82rem;">Taranan Müşteri</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-1 fw-bold text-warning">{{ summary.avg_score }}</div>
+          <div class="text-secondary" style="font-size:.82rem;">Ortalama Skor</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-1 fw-bold text-danger">{{ summary.high_risk_count }}</div>
+          <div class="text-secondary" style="font-size:.82rem;">Yüksek Risk</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-5 fw-bold text-info">{{ "{:,.0f}".format(summary.total_ecl) }} ₺</div>
+          <div class="text-secondary" style="font-size:.82rem;">Toplam Beklenen Zarar (ECL)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── GRAFİKLER ────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header border-secondary"><span class="fw-semibold">Not Dağılımı</span></div>
+        <div class="card-body d-flex align-items-center justify-content-center" style="min-height:200px;">
+          <canvas id="noteChart" width="260" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header border-secondary"><span class="fw-semibold">IFRS 9 Aşama Dağılımı</span></div>
+        <div class="card-body d-flex align-items-center justify-content-center" style="min-height:200px;">
+          <canvas id="stageChart" width="260" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── MÜŞTERİ TABLOSU ──────────────────────────────────── -->
+  <div class="card bg-dark border-secondary">
+    <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">Müşteri Detayları</span>
+      <span class="text-secondary" style="font-size:.82rem;">Toplam: {{ summary.total }}</span>
+    </div>
+    <div class="card-body p-0">
+      <div style="max-height:450px;overflow-y:auto;">
+      <table class="table table-dark table-hover table-sm mb-0 align-middle">
+        <thead class="text-secondary sticky-top" style="font-size:.8rem;top:0;background:#1a1a1a;">
+          <tr>
+            <th class="ps-3">Müşteri</th>
+            <th>Kod</th>
+            <th class="text-end">Skor</th>
+            <th class="text-center">Not</th>
+            <th class="text-center">IFRS 9</th>
+            <th class="text-end">ECL (₺)</th>
+            <th class="text-end">RWA (₺)</th>
+            <th>Veto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in summary.customers %}
+          <tr>
+            <td class="ps-3">
+              <a href="{{ url_for('customer.musteri_detay', customer_id=c.id) }}"
+                 class="text-decoration-none text-white">{{ c.name }}</a>
+            </td>
+            <td class="text-secondary" style="font-size:.82rem;">{{ c.code }}</td>
+            <td class="text-end fw-bold
+              {% if c.score is not none %}
+                {% if c.score >= 70 %}text-success{% elif c.score >= 40 %}text-warning{% else %}text-danger{% endif %}
+              {% endif %}">
+              {{ c.score if c.score is not none else '—' }}
+            </td>
+            <td class="text-center">
+              {% if c.note == 'ERR' %}
+                <span class="badge bg-secondary">ERR</span>
+              {% else %}
+                <span class="badge
+                  {% if c.note and c.note[0] == 'A' %}bg-success
+                  {% elif c.note and c.note[0] == 'B' %}bg-warning text-dark
+                  {% elif c.note and c.note[0] == 'C' %}bg-danger
+                  {% else %}bg-secondary{% endif %}">
+                  {{ c.note or '—' }}
+                </span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if c.stage %}
+                <span class="badge
+                  {% if c.stage == 1 %}bg-success
+                  {% elif c.stage == 2 %}bg-warning text-dark
+                  {% else %}bg-danger{% endif %}">
+                  Aşama {{ c.stage }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end text-secondary" style="font-size:.82rem;">{{ "{:,.0f}".format(c.ecl) }}</td>
+            <td class="text-end text-secondary" style="font-size:.82rem;">{{ "{:,.0f}".format(c.rwa) }}</td>
+            <td>
+              {% if c.veto %}
+                <span class="badge bg-danger" style="font-size:.75rem;">{{ c.veto }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+  (function() {
+    const noteData = {{ summary.note_dist | tojson }};
+    const stageData = {{ summary.stage_dist | tojson }};
+
+    const noteColors = {
+      'AA': '#10b981', 'AB': '#34d399', 'BB': '#f59e0b', 'BC': '#fb923c',
+      'CC': '#ef4444', 'CB': '#f87171', 'D': '#7f1d1d', 'N/A': '#6b7280', 'ERR': '#374151'
+    };
+    const stageColors = ['#10b981', '#f59e0b', '#ef4444'];
+
+    new Chart(document.getElementById('noteChart'), {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(noteData),
+        datasets: [{ data: Object.values(noteData),
+          backgroundColor: Object.keys(noteData).map(k => noteColors[k] || '#6b7280'),
+          borderWidth: 0 }]
+      },
+      options: { plugins: { legend: { labels: { color: '#ccc', font: { size: 12 } } } } }
+    });
+
+    new Chart(document.getElementById('stageChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Aşama 1 (Normal)', 'Aşama 2 (İzlemede)', 'Aşama 3 (Temerrüt)'],
+        datasets: [{ data: [stageData['1']||0, stageData['2']||0, stageData['3']||0],
+          backgroundColor: stageColors, borderWidth: 0 }]
+      },
+      options: { plugins: { legend: { labels: { color: '#ccc', font: { size: 12 } } } } }
+    });
+  })();
+  </script>
+  {% endif %}
+
+</div>
+{% endblock %}
