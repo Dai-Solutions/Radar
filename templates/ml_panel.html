@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block page_guide %}
+<div class="guide-title"><i class="bi bi-cpu me-1"></i>ML Overlay — Makine Öğrenmesi Paneli</div>
+<p class="guide-text">Geçmiş kredi verilerini kullanarak temerrüt olasılığı (PD) tahmin modeli eğitir ve mevcut skorlara ekler.</p>
+<ul class="guide-steps">
+  <li><strong>Modeli Eğit</strong>: Mevcut kredi skorlarından LR veya XGBoost modeli oluşturur (200+ kayıt XGBoost kullanır).</li>
+  <li>Model PD'si, kural tabanlı PD ile %35/%65 oranında harmanlanır.</li>
+  <li>Eğitim tamamlanınca model bilgisi (özellik önemleri, doğruluk) bu panelde görünür.</li>
+  <li>Model dosyası <code>data/ml_model.pkl</code> konumuna kaydedilir.</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4" style="max-width:900px;">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">ML Overlay Paneli</h2>
+      <p class="text-secondary mb-0 small">Logistic Regression / XGBoost temerrüt tahmini — IFRS 9 PD harmanlama</p>
+    </div>
+    <form method="POST" action="{{ url_for('ml.train') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary px-4">
+        <i class="bi bi-cpu me-1"></i> Modeli Eğit / Güncelle
+      </button>
+    </form>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+        {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if not ready %}
+  <div class="card bg-dark border-warning mb-4">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-exclamation-triangle text-warning fs-1 d-block mb-3"></i>
+      <h5 class="text-warning">Model Henüz Eğitilmedi</h5>
+      <p class="text-secondary small mb-4">
+        En az <strong>30</strong> kredi skoru kaydı gereklidir. Mevcut verileri kullanmak için
+        yukarıdaki "Modeli Eğit" butonuna tıklayın.
+      </p>
+      <p class="text-secondary small mb-0">
+        Model yokken sistem tamamen kural tabanlı IFRS 9 PD değerini kullanır — ML harmanlama devre dışıdır.
+      </p>
+    </div>
+  </div>
+  {% else %}
+
+  <!-- Durum Kartları -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-4 fw-bold text-primary">{{ info.model_type }}</div>
+          <div class="text-secondary small">Model Türü</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-4 fw-bold text-success">{{ info.n_samples }}</div>
+          <div class="text-secondary small">Eğitim Örneği</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-4 fw-bold text-warning">{{ "%.1f"|format(info.accuracy * 100) }}%</div>
+          <div class="text-secondary small">Doğruluk</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="fs-4 fw-bold text-info">
+            {% if info.roc_auc %}{{ "%.3f"|format(info.roc_auc) }}{% else %}N/A{% endif %}
+          </div>
+          <div class="text-secondary small">ROC-AUC</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Özellik Önemleri -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-7">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header border-secondary"><span class="fw-semibold">Özellik Önemleri</span></div>
+        <div class="card-body">
+          {% set max_imp = info.importances.values() | max %}
+          {% for feat, val in info.importances | dictsort(by='value', reverse=true) %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between mb-1">
+              <small class="text-secondary">{{ feat }}</small>
+              <small class="text-white">{{ "%.4f"|format(val) }}</small>
+            </div>
+            <div class="progress" style="height:6px;">
+              <div class="progress-bar bg-primary"
+                   style="width:{{ (val / max_imp * 100)|int if max_imp > 0 else 0 }}%"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-5">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header border-secondary"><span class="fw-semibold">Model Detayları</span></div>
+        <div class="card-body small text-secondary">
+          <table class="table table-dark table-sm mb-0">
+            <tr><td>Temerrüt Sayısı</td><td class="text-danger fw-bold">{{ info.n_defaults }}</td></tr>
+            <tr><td>Normal Sayısı</td><td class="text-success fw-bold">{{ info.n_samples - info.n_defaults }}</td></tr>
+            <tr><td>ML Blend Ağırlığı</td><td>%35</td></tr>
+            <tr><td>Son Eğitim</td>
+                <td>{{ info.trained_at[:16].replace('T',' ') }}</td></tr>
+          </table>
+          <hr class="border-secondary my-3">
+          <div class="text-secondary" style="font-size:.8rem;line-height:1.6;">
+            <strong class="text-white">Nasıl Çalışır?</strong><br>
+            Her skor hesaplamada ML modeli ayrı bir PD tahmini üretir.
+            Nihai IFRS 9 PD = %65 kural tabanlı + %35 ML tahmini olarak harmanlanır.
+            Bu harmanlama ECL ve RWA hesaplamalarına yansır.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
