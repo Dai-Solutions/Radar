@@ -215,8 +215,7 @@ def verify_email(token):
 
 @auth_bp.route('/login/google')
 def login_google():
-    # Google Console'da tanımlı olan adrese sadık kalıyoruz (technodai.com/radar)
-    redirect_uri = "https://technodai.com/radar/login/google/callback"
+    redirect_uri = url_for('auth.authorize', _external=True)
     return oauth.google.authorize_redirect(redirect_uri, prompt='select_account')
 
 @auth_bp.route('/login/google/callback')
