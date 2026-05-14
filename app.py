@@ -23,6 +23,7 @@ from routes.portfolio import portfolio_bp
 from routes.ml import ml_bp
 from routes.bddk import bddk_bp
 from routes.openbanking import ob_bp
+from routes.mcp import mcp_bp
 
 # Logic & Utils
 from database import init_db, get_session, remove_session, User
@@ -117,6 +118,7 @@ def create_app():
     app.register_blueprint(ml_bp)
     app.register_blueprint(bddk_bp)
     app.register_blueprint(ob_bp)
+    app.register_blueprint(mcp_bp)
     
     # Çeviri sözlüklerini app start'ta bir kez prefix ile materialize et
     import json as _json
