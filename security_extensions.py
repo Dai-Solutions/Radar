@@ -35,6 +35,12 @@ def init_security(app):
     except Exception as e:
         logger.warning(f'CSRF exempt for api_bp failed: {e}')
 
+    try:
+        from routes.mcp import mcp_bp
+        csrf.exempt(mcp_bp)
+    except Exception as e:
+        logger.warning(f'CSRF exempt for mcp_bp failed: {e}')
+
     # ── Rate Limiter ────────────────────────────────────────
     limiter.init_app(app)
 
